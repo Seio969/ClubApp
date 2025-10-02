@@ -1,0 +1,10 @@
+[project]
+name = "appclubpapa"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pyside6>=6.9.2",
+    "sqlalchemy>=2.0.43",
+]
