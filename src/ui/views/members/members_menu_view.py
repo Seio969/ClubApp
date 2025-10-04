@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QToolButton,
-    QToolBar,
     QStyle,
     QMenu,
     QSizePolicy,
@@ -31,6 +30,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt, QSize
+
+from .members_toolbar import MembersToolBar
 
 
 class MembersMenuView(QWidget):
@@ -114,46 +115,8 @@ class MembersMenuView(QWidget):
         main_layout.addWidget(top_bar)
 
         # --- Toolbar just below the top bar ----------------------------------
-        # Use a QToolBar so the UI resembles a typical app toolbar with quick
-        # actions. It's non-movable and uses standard style icons for a
-        # lightweight, dependency-free appearance.
-        self.toolbar = QToolBar(self)
-        self.toolbar.setObjectName("membersToolBar")
-        self.toolbar.setMovable(False)
-        self.toolbar.setIconSize(QSize(18, 18))
-
-        # New / Add action (reuses the existing add member handler)
-        icon_new = self.style().standardIcon(QStyle.SP_FileIcon)
-        act_new = self.toolbar.addAction(icon_new, "Nuevo")
-        act_new.setToolTip("Crear nuevo miembro")
-        act_new.triggered.connect(self.on_add_member)
-
-        # Edit action
-        icon_edit = self.style().standardIcon(QStyle.SP_DialogApplyButton)
-        act_edit = self.toolbar.addAction(icon_edit, "Editar")
-        act_edit.setToolTip("Editar miembro seleccionado")
-        act_edit.triggered.connect(self.on_edit_member)
-
-        # Delete action
-        icon_delete = self.style().standardIcon(QStyle.SP_TrashIcon)
-        act_delete = self.toolbar.addAction(icon_delete, "Eliminar")
-        act_delete.setToolTip("Eliminar miembro seleccionado")
-        act_delete.triggered.connect(self.on_delete_member)
-
-        self.toolbar.addSeparator()
-
-        # Refresh
-        icon_refresh = self.style().standardIcon(QStyle.SP_BrowserReload)
-        act_refresh = self.toolbar.addAction(icon_refresh, "Refrescar")
-        act_refresh.setToolTip("Refrescar lista")
-        act_refresh.triggered.connect(self.on_refresh)
-
-        # Export
-        icon_export = self.style().standardIcon(QStyle.SP_DialogSaveButton)
-        act_export = self.toolbar.addAction(icon_export, "Exportar")
-        act_export.setToolTip("Exportar resultados")
-        act_export.triggered.connect(self.on_export)
-
+        # Use the specialized MembersToolBar for member-specific actions
+        self.toolbar = MembersToolBar(self)
         main_layout.addWidget(self.toolbar)
 
         # --- Central area: left -> results table, right -> action menu -------------
@@ -175,6 +138,10 @@ class MembersMenuView(QWidget):
         self.table.setModel(self.model)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        
+        # Set table and model references for the toolbar
+        self.toolbar.set_table_references(self.table, self.model)
+        
         central_layout.addWidget(self.table, 3)
         # Ensure the layout uses the desired 3:1 horizontal stretch
         central_layout.setStretch(0, 3)
@@ -272,42 +239,8 @@ class MembersMenuView(QWidget):
 
     def on_add_member(self) -> None:
         # Placeholder: real implementation should open the member form
+        # This method is also available in the toolbar, but kept here for the right menu button
         print("Añadir miembro (placeholder)")
-
-
-    # ------------------ toolbar placeholder handlers ------------------------
-    def on_edit_member(self) -> None:
-        # In a real app, check selection and open the selected member for edit
-        sel = self.table.selectionModel().selectedRows()
-        if not sel:
-            print("Editar: no hay ninguna fila seleccionada")
-            return
-        row = sel[0].row()
-        id_item = self.model.item(row, 0)
-        print(f"Editar miembro (placeholder) id={id_item.text() if id_item else row}")
-
-    def on_delete_member(self) -> None:
-        sel = self.table.selectionModel().selectedRows()
-        if not sel:
-            print("Eliminar: no hay ninguna fila seleccionada")
-            return
-        # Remove selected rows from the model (simple behavior for demo)
-        rows = sorted((s.row() for s in sel), reverse=True)
-        for r in rows:
-            self.model.removeRow(r)
-        print(f"Eliminadas {len(rows)} fila(s)")
-
-    def on_refresh(self) -> None:
-        # For demonstration, clear and re-add a small set of sample rows
-        print("Refrescar lista (placeholder)")
-        self.model.removeRows(0, self.model.rowCount())
-        for i in range(1, 6):
-            row = [QStandardItem(str(i)), QStandardItem(f"Miembro {i}"), QStandardItem(f"m{i}@example.com"), QStandardItem("Activo")]
-            self.model.appendRow(row)
-
-    def on_export(self) -> None:
-        # Placeholder: wire this to a real exporter in utils/exporters.py later
-        print("Exportar resultados (placeholder)")
 
 
     def _populate_demo_views(self, count: int = 12) -> None:
