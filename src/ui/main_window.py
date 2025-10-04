@@ -43,9 +43,8 @@ class MainWindow(QMainWindow):
 		self._home = MainMenuWidget(self)
 		self._stack.addWidget(self._home)
 		# Create the standard menu bar on the main window using the builder.
-		MainMenuBar(self)
-
-
+		self._menu_bar = MainMenuBar(self)
+		self.setMenuBar(self._menu_bar)
 
 def run_main_window(argv: Optional[list[str]] = None) -> int:
 	"""Create QApplication, show MainWindow and run the event loop.

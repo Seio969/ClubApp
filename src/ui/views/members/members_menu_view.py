@@ -2,10 +2,10 @@
 
 Layout requested:
 - Top: a horizontal "roll" that will hold buttons for future table/views.
-- Below the top bar, left: the query results (table view).
-- Below the top bar, right: a vertical menu with buttons: Buscar (uses the top bar search input), Filtros, Anadir miembro.
+- Below the top bar: the query results (table view) occupying the main area.
 
 This file provides a ready-to-use QWidget that can be added to the main window stack.
+The right-side vertical action menu was removed per UI simplification.
 """
 
 from __future__ import annotations
@@ -146,34 +146,8 @@ class MembersMenuView(QWidget):
         # Ensure the layout uses the desired 3:1 horizontal stretch
         central_layout.setStretch(0, 3)
 
-        # Right: vertical menu with buttons
-        right_menu = QWidget(central)
-        right_menu.setObjectName("rightMenu")
-        # Allow the right menu to expand vertically to match the table height
-        right_menu.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
-        right_layout = QVBoxLayout(right_menu)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(4)
-        # Keep controls aligned to the top; stretch will push the add button down
-        right_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-
-        # Filtros button
-        btn_filters = QPushButton("Filtros")
-        btn_filters.clicked.connect(self.on_filters)
-        right_layout.addWidget(btn_filters)
-
-        # Spacer to push add button to bottom-ish
-        right_layout.addStretch(1)
-
-        # Anadir miembro button
-        btn_add = QPushButton("Añadir miembro")
-        btn_add.clicked.connect(self.on_add_member)
-        right_layout.addWidget(btn_add)
-
-        central_layout.addWidget(right_menu, 1)
-        central_layout.setStretch(1, 1)
-
+        # (Right-side action menu removed.) The table occupies the central area.
+        # Ensure the table stretches to take available horizontal space.
         main_layout.addWidget(central)
 
         # Small, pleasant stylesheet to make layout readable
@@ -234,13 +208,13 @@ class MembersMenuView(QWidget):
             self.model.appendRow(row)
 
     def on_filters(self) -> None:
-        # Placeholder for filter dialog/controls
-        print("Abrir filtros (placeholder)")
+        # (Removed) was a placeholder for filter dialog/controls
+        pass
 
     def on_add_member(self) -> None:
-        # Placeholder: real implementation should open the member form
-        # This method is also available in the toolbar, but kept here for the right menu button
-        print("Añadir miembro (placeholder)")
+        # (Removed) the toolbar provides add-member behaviour; view-level
+        # handler was removed when the right-side menu was deleted.
+        pass
 
 
     def _populate_demo_views(self, count: int = 12) -> None:
