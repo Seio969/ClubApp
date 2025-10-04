@@ -15,20 +15,24 @@ from PySide6.QtGui import QStandardItemModel, QStandardItem
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QWidget
 
+from services.members_service import MembersService
+
 
 class MembersToolBar(QToolBar):
     """Toolbar for members view with CRUD and utility actions."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None, service: Optional[MembersService] = None) -> None:
         super().__init__(parent)
         self.setObjectName("membersToolBar")
         self.setMovable(False)
         self.setIconSize(QSize(18, 18))
-        
         # Reference to the table view and model (will be set by parent)
         self.table: Optional[QTableView] = None
         self.model: Optional[QStandardItemModel] = None
-        
+
+        # Behaviour service (non-UI logic)
+        self.service: MembersService = service or MembersService()
+
         self._setup_actions()
 
     def _setup_actions(self) -> None:
@@ -72,62 +76,20 @@ class MembersToolBar(QToolBar):
 
     def on_add_member(self) -> None:
         """Handle add member action."""
-        # Placeholder: real implementation should open the member form
-        print("Añadir miembro (placeholder)")
+        self.service.add_member()
 
     def on_edit_member(self) -> None:
         """Handle edit member action."""
-        if not self.table:
-            print("Error: no hay referencia a la tabla")
-            return
-            
-        # In a real app, check selection and open the selected member for edit
-        sel = self.table.selectionModel().selectedRows()
-        if not sel:
-            print("Editar: no hay ninguna fila seleccionada")
-            return
-        row = sel[0].row()
-        if self.model:
-            id_item = self.model.item(row, 0)
-            print(f"Editar miembro (placeholder) id={id_item.text() if id_item else row}")
-        else:
-            print(f"Editar miembro (placeholder) fila={row}")
+        self.service.edit_member(self.table, self.model)
 
     def on_delete_member(self) -> None:
         """Handle delete member action."""
-        if not self.table or not self.model:
-            print("Error: no hay referencias a la tabla o modelo")
-            return
-            
-        sel = self.table.selectionModel().selectedRows()
-        if not sel:
-            print("Eliminar: no hay ninguna fila seleccionada")
-            return
-        # Remove selected rows from the model (simple behavior for demo)
-        rows = sorted((s.row() for s in sel), reverse=True)
-        for r in rows:
-            self.model.removeRow(r)
-        print(f"Eliminadas {len(rows)} fila(s)")
+        self.service.delete_members(self.table, self.model)
 
     def on_refresh(self) -> None:
         """Handle refresh action."""
-        if not self.model:
-            print("Error: no hay referencia al modelo")
-            return
-            
-        # For demonstration, clear and re-add a small set of sample rows
-        print("Refrescar lista (placeholder)")
-        self.model.removeRows(0, self.model.rowCount())
-        for i in range(1, 6):
-            row = [
-                QStandardItem(str(i)), 
-                QStandardItem(f"Miembro {i}"), 
-                QStandardItem(f"m{i}@example.com"), 
-                QStandardItem("Activo")
-            ]
-            self.model.appendRow(row)
+        self.service.refresh_members(self.model)
 
     def on_export(self) -> None:
         """Handle export action."""
-        # Placeholder: wire this to a real exporter in utils/exporters.py later
-        print("Exportar resultados (placeholder)")
+        self.service.export_members(self.model)
