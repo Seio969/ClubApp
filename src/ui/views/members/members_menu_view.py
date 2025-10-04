@@ -207,14 +207,6 @@ class MembersMenuView(QWidget):
             row = [QStandardItem("1"), QStandardItem(text), QStandardItem("n/a@example.com"), QStandardItem("Activo")]
             self.model.appendRow(row)
 
-    def on_filters(self) -> None:
-        # (Removed) was a placeholder for filter dialog/controls
-        pass
-
-    def on_add_member(self) -> None:
-        # (Removed) the toolbar provides add-member behaviour; view-level
-        # handler was removed when the right-side menu was deleted.
-        pass
 
 
     def _populate_demo_views(self, count: int = 12) -> None:
