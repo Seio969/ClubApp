@@ -11,4 +11,4 @@ if not DB_PATH.exists():
 if __name__ == "__main__":
 	# Allows running this file directly for quick manual testing.
 	raise SystemExit(run_main_window())
-x
+xfvd
