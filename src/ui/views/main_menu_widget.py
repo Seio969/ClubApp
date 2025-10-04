@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QAction
 from ui.views.members.members_menu_view import show_members_view
-from ui.views.menu_bar import create_menu_bar
 
 
 
