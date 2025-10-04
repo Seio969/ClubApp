@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.views.main_menu_widget import MainMenuWidget
-
+from ui.views.menu_bar import create_menu_bar
 
 class MainWindow(QMainWindow):
 	"""Main application window.
@@ -42,6 +42,9 @@ class MainWindow(QMainWindow):
 		# Create and register the home menu widget
 		self._home = MainMenuWidget(self)
 		self._stack.addWidget(self._home)
+		# Create the standard menu bar on the main window using shared helper.
+		create_menu_bar(self, self)
+
 
 
 def run_main_window(argv: Optional[list[str]] = None) -> int:
