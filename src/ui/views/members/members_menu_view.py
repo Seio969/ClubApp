@@ -284,8 +284,8 @@ class MembersMenuView(QWidget):
     def load_table_view(self, table_name: str) -> None:
         """Load the named table into the results table by querying the DB.
 
-        This calls the service.fetch_table which validates the table and
-        populates the model.
+        This calls the service.fetch_view which validates/dispatches the view
+        (table/sql/callable) and populates the model.
         """
         print(f"Cargando vista: {table_name}")
         # remember which view is currently loaded so refresh can re-run it
