@@ -62,54 +62,77 @@ class MembersMenuView(QWidget):
         top_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         top_layout = QHBoxLayout(top_bar)
         top_layout.setContentsMargins(6, 6, 6, 6)
-        # Reduce global spacing so we control the exact gap after the back button.
+        # Reduce global spacing so we control the exact gaps inside groups.
         top_layout.setSpacing(0)
 
-        # Back button to return to main menu
-        back_button = QPushButton("← Volver")
+        # Left group: back button (compact)
+        left_group = QWidget(top_bar)
+        left_group.setObjectName("topLeftGroup")
+        left_layout = QHBoxLayout(left_group)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(8)
+
+        back_button = QPushButton()
         back_button.setObjectName("backButton")
         back_button.setToolTip("Volver al menú principal")
-        back_button.setMaximumWidth(100)
+        back_button.setMaximumWidth(120)
+        back_button.setText("Volver")
+        back_button.setIcon(self.style().standardIcon(QStyle.SP_ArrowBack))
         back_button.clicked.connect(self.on_back_to_main_menu)
-        top_layout.addWidget(back_button, 0, Qt.AlignmentFlag.AlignLeft)
+        left_layout.addWidget(back_button)
 
-        # Small fixed gap of 8 pixels so the search input sits right next to the back button
-        top_layout.addSpacing(8)
+        top_layout.addWidget(left_group, 0, Qt.AlignmentFlag.AlignLeft)
 
-        # A small search input on the top bar (the right-side Buscar button will use this)
-        self.search_input = QLineEdit(top_bar)
-        self.search_input.setPlaceholderText("Buscar...")
+        # Center group: nicer, slightly larger search area
+        center_group = QWidget(top_bar)
+        center_group.setObjectName("topCenterGroup")
+        center_layout = QHBoxLayout(center_group)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(6)
+
+        self.search_input = QLineEdit(center_group)
+        self.search_input.setPlaceholderText("Buscar miembros, email, id...")
         self.search_input.setClearButtonEnabled(True)
-        self.search_input.setMinimumHeight(28)
-        self.search_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.search_input.setMinimumHeight(34)
+        self.search_input.setMinimumWidth(300)
+        self.search_input.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.search_input.returnPressed.connect(self.on_search)
-        top_layout.addWidget(self.search_input, Qt.AlignmentFlag.AlignLeft)
+        center_layout.addWidget(self.search_input)
 
-        # Buscar button - uses the top bar input as requested
         btn_search = QPushButton("Buscar")
         btn_search.setToolTip("Buscar usando el texto del campo superior")
-        btn_search.setMaximumWidth(100)
+        btn_search.setMaximumWidth(110)
+        btn_search.setMinimumHeight(34)
+        btn_search.setIcon(self.style().standardIcon(QStyle.SP_FileDialogContentsView))
         btn_search.clicked.connect(self.on_search)
-        top_layout.addWidget(btn_search)
+        center_layout.addWidget(btn_search)
 
-        # Push the views dropdown to the far right so the left-side controls remain packed.
+        # Use stretches to keep the search area visually centered between left and right groups
+        top_layout.addStretch(1)
+        top_layout.addWidget(center_group, 0, Qt.AlignmentFlag.AlignCenter)
         top_layout.addStretch(1)
 
-        self.views_button = QToolButton(top_bar)
+        # Right group: views menu and (future) actions
+        right_group = QWidget(top_bar)
+        right_group.setObjectName("topRightGroup")
+        right_layout = QHBoxLayout(right_group)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(8)
+
+        self.views_button = QToolButton(right_group)
         self.views_button.setObjectName("viewsButton")
         self.views_button.setText("Vistas")
         self.views_button.setToolTip("Seleccionar vista")
-        # Show the menu instantly when the button is clicked on the arrow
         self.views_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        # Set longer minimum width to accommodate text + arrow
-        self.views_button.setMinimumWidth(180)
-        # Set text on the left, arrow on the right
+        self.views_button.setMinimumWidth(140)
         self.views_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.views_menu = QMenu(self.views_button)
         self.views_button.setMenu(self.views_menu)
-        # Make the button take available horizontal space but keep a fixed height
-        self.views_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        top_layout.addWidget(self.views_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self.views_button.setIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
+        self.views_button.setAutoRaise(True)
+        right_layout.addWidget(self.views_button)
+
+        top_layout.addWidget(right_group, 0, Qt.AlignmentFlag.AlignRight)
 
 
 

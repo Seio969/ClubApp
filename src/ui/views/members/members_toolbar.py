@@ -15,7 +15,7 @@ from PySide6.QtGui import QStandardItemModel, QStandardItem
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QWidget
 
-from services.members_service import MembersService
+from services.members_toolbar_service import MembersService
 
 
 class MembersToolBar(QToolBar):
