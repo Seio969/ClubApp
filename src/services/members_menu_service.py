@@ -9,9 +9,7 @@ from __future__ import annotations
 
 from typing import Any, List, Optional
 
-from database.session import engine
-from sqlalchemy import text
-from sqlalchemy import inspect as sqlalchemy_inspect
+from services.view_registry import ViewRegistry
 
 
 class MembersMenuService:
@@ -47,60 +45,40 @@ class MembersMenuService:
             print("MembersMenuService.search_members: failed -", exc)
             return 0
 
-    # ------------------------------------------------------------------
+    def __init__(self) -> None:
+        # Delegate view/table discovery and fetching to ViewRegistry
+        self._view_registry = ViewRegistry()
+
     def get_db_tables(self) -> List[str]:
-        """Return a list of table names present in the configured database.
+        return self._view_registry.get_db_tables()
 
-        This uses SQLAlchemy's inspector so it is safe and database-agnostic.
-        """
-        try:
-            inspector = sqlalchemy_inspect(engine)
-            tables = inspector.get_table_names()
-            return tables
-        except Exception as exc:
-            print("MembersMenuService.get_db_tables: failed -", exc)
-            return []
+    def get_views(self) -> List[str]:
+        return self._view_registry.get_views()
 
-    def fetch_table(self, table_name: str, model: Any, limit: int = 500) -> int:
-        """Execute a SELECT * FROM <table_name> and populate the provided Qt model.
-
-        The table_name is validated against the database's table list to
-        avoid SQL injection. Returns number of rows added.
-        """
+    def fetch_view(self, name: str, model: Any, limit: int = 500) -> int:
+        """Fetch a registered view (table/sql/callable) and populate the Qt model."""
         if model is None:
-            print("MembersMenuService.fetch_table: no model provided")
+            print("MembersMenuService.fetch_view: no model provided")
             return 0
-
         try:
-            tables = self.get_db_tables()
-            if table_name not in tables:
-                print(f"MembersMenuService.fetch_table: unknown table '{table_name}'")
-                return 0
-
-            # Run the query. table_name is safe because we validated it above.
-            stmt = text(f'SELECT * FROM "{table_name}" LIMIT :limit')
-            with engine.connect() as conn:
-                res = conn.execute(stmt, {"limit": limit})
-                rows = res.fetchall()
-                keys = res.keys()
-
-            # Populate the Qt model
+            keys, rows = self._view_registry.fetch_view(name, limit=limit)
             from PySide6.QtGui import QStandardItem
 
-            # Clear and set columns
             model.removeRows(0, model.rowCount())
             model.setColumnCount(len(keys))
             model.setRowCount(0)
             model.setHorizontalHeaderLabels([str(k) for k in keys])
-
             for row in rows:
                 items = [QStandardItem("") if v is None else QStandardItem(str(v)) for v in row]
                 model.appendRow(items)
-
             return len(rows)
         except Exception as exc:
-            print("MembersMenuService.fetch_table: failed -", exc)
+            print("MembersMenuService.fetch_view: failed -", exc)
             return 0
+
+    def fetch_table(self, table_name: str, model: Any, limit: int = 500) -> int:
+        """Backward-compatible helper: fetch a table by name and populate model."""
+        return self.fetch_view(table_name, model, limit=limit)
 
     def get_filter_labels(self, model: Optional[Any]) -> List[str]:
         """Return a list of header labels for the provided model.

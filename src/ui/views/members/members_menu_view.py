@@ -195,15 +195,14 @@ class MembersMenuView(QWidget):
 
         # Small, pleasant stylesheet to make layout readable
         self.setStyleSheet(MEMBERS_MENU_STYLESHEET)
-        # Populate views dropdown dynamically from database tables
+        # Populate views dropdown dynamically from service-registered views
         self._populate_db_views()
 
-        # Try to load the first table automatically (if any)
+        # Try to load the first registered view automatically (if any)
         try:
-            tables = self._service.get_db_tables()
-            if tables:
-                # load the first table
-                self.load_table_view(tables[0])
+            views = self._service.get_views()
+            if views:
+                self.load_table_view(views[0])
         except Exception:
             pass
 
@@ -277,14 +276,14 @@ class MembersMenuView(QWidget):
         """Populate the views dropdown with actual database table names."""
         self.views_menu.clear()
         try:
-            tables = self._service.get_db_tables()
-            if not tables:
+            views = self._service.get_views()
+            if not views:
                 # fallback: keep a demo entry so the menu isn't empty
-                action = self.views_menu.addAction("No hay tablas")
+                action = self.views_menu.addAction("No hay vistas registradas")
                 action.setEnabled(False)
                 return
 
-            for name in tables:
+            for name in views:
                 action = self.views_menu.addAction(name)
                 action.triggered.connect(lambda checked=False, n=name: self.load_table_view(n))
         except Exception as exc:
@@ -296,9 +295,9 @@ class MembersMenuView(QWidget):
         This calls the service.fetch_table which validates the table and
         populates the model.
         """
-        print(f"Cargando tabla: {table_name}")
-        added = self._service.fetch_table(table_name, self.model)
-        print(f"Cargadas {added} filas desde '{table_name}'")
+        print(f"Cargando vista: {table_name}")
+        added = self._service.fetch_view(table_name, self.model)
+        print(f"Cargadas {added} filas desde vista '{table_name}'")
         # Refresh filters menu to match new columns
         self._populate_filters_menu()
 
