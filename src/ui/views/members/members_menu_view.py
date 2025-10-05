@@ -182,8 +182,7 @@ class MembersMenuView(QWidget):
         self.toolbar.set_table_references(self.table, self.model)
         # Backend/service used by the view
         self._service = MembersMenuService()
-
-        # Populate filters menu based on current model columns
+    # Populate filters menu based on current model columns
         self._populate_filters_menu()
         
         central_layout.addWidget(self.table, 3)
@@ -196,7 +195,17 @@ class MembersMenuView(QWidget):
 
         # Small, pleasant stylesheet to make layout readable
         self.setStyleSheet(MEMBERS_MENU_STYLESHEET)
-        self._populate_demo_views()
+        # Populate views dropdown dynamically from database tables
+        self._populate_db_views()
+
+        # Try to load the first table automatically (if any)
+        try:
+            tables = self._service.get_db_tables()
+            if tables:
+                # load the first table
+                self.load_table_view(tables[0])
+        except Exception:
+            pass
 
     # ---------------------- placeholder event handlers -------------------------
     def on_back_to_main_menu(self) -> None:
@@ -263,6 +272,35 @@ class MembersMenuView(QWidget):
         for name in self._service.get_demo_views(count):
             action = self.views_menu.addAction(name)
             action.triggered.connect(lambda checked=False, n=name: self.on_select_view(n))
+
+    def _populate_db_views(self) -> None:
+        """Populate the views dropdown with actual database table names."""
+        self.views_menu.clear()
+        try:
+            tables = self._service.get_db_tables()
+            if not tables:
+                # fallback: keep a demo entry so the menu isn't empty
+                action = self.views_menu.addAction("No hay tablas")
+                action.setEnabled(False)
+                return
+
+            for name in tables:
+                action = self.views_menu.addAction(name)
+                action.triggered.connect(lambda checked=False, n=name: self.load_table_view(n))
+        except Exception as exc:
+            print("MembersMenuView._populate_db_views: failed -", exc)
+
+    def load_table_view(self, table_name: str) -> None:
+        """Load the named table into the results table by querying the DB.
+
+        This calls the service.fetch_table which validates the table and
+        populates the model.
+        """
+        print(f"Cargando tabla: {table_name}")
+        added = self._service.fetch_table(table_name, self.model)
+        print(f"Cargadas {added} filas desde '{table_name}'")
+        # Refresh filters menu to match new columns
+        self._populate_filters_menu()
 
 
 
