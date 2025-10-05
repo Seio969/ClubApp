@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QAbstractItemView,
 )
-from PySide6.QtGui import QStandardItemModel, QStandardItem
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction
 from PySide6.QtCore import Qt, QSize
 
 from .members_toolbar import MembersToolBar
@@ -132,6 +132,20 @@ class MembersMenuView(QWidget):
         self.views_button.setAutoRaise(True)
         right_layout.addWidget(self.views_button)
 
+        # Filters dropdown: will contain checkable actions for each column
+        self.filters_button = QToolButton(right_group)
+        self.filters_button.setObjectName("filtersButton")
+        self.filters_button.setText("Filtros")
+        self.filters_button.setToolTip("Mostrar/ocultar columnas")
+        self.filters_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.filters_button.setMinimumWidth(140)
+        self.filters_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.filters_menu = QMenu(self.filters_button)
+        self.filters_button.setMenu(self.filters_menu)
+        self.filters_button.setIcon(self.style().standardIcon(QStyle.SP_DialogYesButton))
+        self.filters_button.setAutoRaise(True)
+        right_layout.addWidget(self.filters_button)
+
         top_layout.addWidget(right_group, 0, Qt.AlignmentFlag.AlignRight)
 
 
@@ -165,6 +179,8 @@ class MembersMenuView(QWidget):
         
         # Set table and model references for the toolbar
         self.toolbar.set_table_references(self.table, self.model)
+        # Populate filters menu based on current model columns
+        self._populate_filters_menu()
         
         central_layout.addWidget(self.table, 3)
         # Ensure the layout uses the desired 3:1 horizontal stretch
@@ -192,6 +208,37 @@ class MembersMenuView(QWidget):
         In a real app this would switch the visible table/model to the selected view.
         """
         print(f"Seleccionada vista: {name}")
+        # In a real app switching views would change the model/columns.
+        # For now, repopulate the filters menu so it reflects the active model.
+        self._populate_filters_menu()
+
+    def _populate_filters_menu(self) -> None:
+        """Create checkable actions for each column in the current model.
+
+        By default all columns are visible (checked). Toggling an action
+        will hide/show the corresponding column in the table view.
+        """
+        # Ensure menu exists
+        if not hasattr(self, "filters_menu") or self.filters_menu is None:
+            self.filters_menu = QMenu(self)
+            self.filters_button.setMenu(self.filters_menu)
+
+        self.filters_menu.clear()
+
+        col_count = self.model.columnCount()
+        for col in range(col_count):
+            header = self.model.headerData(col, Qt.Orientation.Horizontal)
+            # Ensure header is a string
+            label = str(header) if header is not None else f"Columna {col}"
+            action = QAction(label, self.filters_menu)
+            action.setCheckable(True)
+            # By default all visible
+            action.setChecked(not self.table.isColumnHidden(col))
+            # Store column index in action data
+            action.setData(col)
+            # Connect toggled signal with the current column index bound
+            action.toggled.connect(lambda checked, idx=col: self.table.setColumnHidden(idx, not checked))
+            self.filters_menu.addAction(action)
 
     def on_search(self) -> None:
         """Perform a simple search using the text in the top bar input.
