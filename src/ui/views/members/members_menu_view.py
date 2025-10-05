@@ -33,6 +33,7 @@ from PySide6.QtCore import Qt, QSize
 
 from .members_toolbar import MembersToolBar
 from ui.styles import MEMBERS_MENU_STYLESHEET
+from services.members_menu_service import MembersMenuService
 
 
 class MembersMenuView(QWidget):
@@ -179,6 +180,9 @@ class MembersMenuView(QWidget):
         
         # Set table and model references for the toolbar
         self.toolbar.set_table_references(self.table, self.model)
+        # Backend/service used by the view
+        self._service = MembersMenuService()
+
         # Populate filters menu based on current model columns
         self._populate_filters_menu()
         
@@ -225,18 +229,13 @@ class MembersMenuView(QWidget):
 
         self.filters_menu.clear()
 
-        col_count = self.model.columnCount()
-        for col in range(col_count):
-            header = self.model.headerData(col, Qt.Orientation.Horizontal)
-            # Ensure header is a string
-            label = str(header) if header is not None else f"Columna {col}"
+        # Use the service to extract header labels and build actions
+        labels = self._service.get_filter_labels(self.model)
+        for col, label in enumerate(labels):
             action = QAction(label, self.filters_menu)
             action.setCheckable(True)
-            # By default all visible
             action.setChecked(not self.table.isColumnHidden(col))
-            # Store column index in action data
             action.setData(col)
-            # Connect toggled signal with the current column index bound
             action.toggled.connect(lambda checked, idx=col: self.table.setColumnHidden(idx, not checked))
             self.filters_menu.addAction(action)
 
@@ -248,11 +247,9 @@ class MembersMenuView(QWidget):
         """
         text = self.search_input.text().strip()
         print(f"Buscar: '{text}'")
-        # Replace model contents with a sample row for demonstration
-        self.model.removeRows(0, self.model.rowCount())
-        if text:
-            row = [QStandardItem("1"), QStandardItem(text), QStandardItem("n/a@example.com"), QStandardItem("Activo")]
-            self.model.appendRow(row)
+        # Delegate search/population to service
+        added = self._service.search_members(text, self.model)
+        print(f"Search added {added} rows")
 
 
 
@@ -263,10 +260,8 @@ class MembersMenuView(QWidget):
         Each action will call `on_select_view` with the view name.
         """
         self.views_menu.clear()
-        for i in range(count):
-            name = f"Vista {i+1}"
+        for name in self._service.get_demo_views(count):
             action = self.views_menu.addAction(name)
-            # Connect using a lambda that captures the current name
             action.triggered.connect(lambda checked=False, n=name: self.on_select_view(n))
 
 

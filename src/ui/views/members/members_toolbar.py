@@ -86,19 +86,63 @@ class MembersToolBar(QToolBar):
 
     def on_edit_member(self) -> None:
         """Handle edit member action."""
-        self.service.edit_member(self.table, self.model)
+        # Extract selected indices from the table selection model
+        if self.table is None:
+            self.service.edit_member([])
+            return
+        sel = self.table.selectionModel().selectedRows()
+        indices = [s.row() for s in sel] if sel else []
+
+        # Provide a model_getter callable that returns the model.item(row, col)
+        def model_getter(row: int, col: int):
+            if self.model is None:
+                return None
+            return self.model.item(row, col)
+
+        self.service.edit_member(indices, model_getter)
 
     def on_delete_member(self) -> None:
         """Handle delete member action."""
-        self.service.delete_members(self.table, self.model)
+        if self.table is None:
+            self.service.delete_members([])
+            return
+        sel = self.table.selectionModel().selectedRows()
+        indices = [s.row() for s in sel] if sel else []
+        rows_to_remove = self.service.delete_members(indices)
+        # Perform actual deletion on the model
+        if self.model is not None and rows_to_remove:
+            for r in rows_to_remove:
+                self.model.removeRow(r)
 
     def on_refresh(self) -> None:
         """Handle refresh action."""
-        self.service.refresh_members(self.model)
+        # Service returns plain row data; UI converts to QStandardItem rows
+        rows = self.service.refresh_members()
+        if self.model is None:
+            return
+        try:
+            self.model.removeRows(0, self.model.rowCount())
+            for row in rows:
+                items = [QStandardItem(c) for c in row]
+                self.model.appendRow(items)
+        except Exception as exc:
+            print("MembersToolBar.on_refresh: failed to populate model -", exc)
 
     def on_export(self) -> None:
         """Handle export action."""
-        self.service.export_members(self.model)
+        # Extract plain rows from the model and pass to service
+        rows: list[list[str]] = []
+        if self.model is not None:
+            for r in range(self.model.rowCount()):
+                row_vals = []
+                for c in range(self.model.columnCount()):
+                    item = self.model.item(r, c)
+                    try:
+                        row_vals.append(item.text() if item is not None else "")
+                    except Exception:
+                        row_vals.append(str(item) if item is not None else "")
+                rows.append(row_vals)
+        self.service.export_members(rows, destination=None)
 
     def on_register_movements(self) -> None:
         """Handle register movements action (cargos / pagos / devoluciones).
@@ -106,5 +150,9 @@ class MembersToolBar(QToolBar):
         Currently a placeholder that delegates to the service layer. The
         service will implement detailed dialogs and persistence in the future.
         """
-        # Pass table and model so future implementation can inspect selection/context
-        self.service.register_transactions(self.table, self.model)
+        if self.table is None:
+            self.service.register_transactions([])
+            return
+        sel = self.table.selectionModel().selectedRows()
+        indices = [s.row() for s in sel] if sel else []
+        self.service.register_transactions(indices)
