@@ -70,7 +70,23 @@ QPushButton { min-width: 90px; min-height: 28px; }
 #backButton:pressed { 
     background-color: #d0d0d0; 
 }
-#resultsTable { background: #ffffff; }
+/* Results table: white rows with a subtle alternate row color and black text */
+#resultsTable {
+    background: #ffffff;
+    /* Ensure table cell text is black */
+    color: #000000;
+    /* Qt supports alternatingRowColors when set on the view; this provides the
+       alternate row color used when QTableView.setAlternatingRowColors(True) */
+    alternate-background-color: #f6f6f6;
+}
+/* Also make sure individual table items keep black text (normal/alternate) */
+#resultsTable QTableView::item {
+    color: #000000;
+}
+# /* Make sure header section text is also black */
+# #resultsTable QHeaderView::section {
+#     color: #000000;
+}
 """
 
 # Small per-widget styles that were previously set inline
