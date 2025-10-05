@@ -32,6 +32,7 @@ from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt, QSize
 
 from .members_toolbar import MembersToolBar
+from ui.styles import MEMBERS_MENU_STYLESHEET
 
 
 class MembersMenuView(QWidget):

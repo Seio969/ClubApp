@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QAction
 from ui.views.members.members_menu_view import show_members_view
+from ui.styles import MAIN_MENU_STYLESHEET, TITLE_STYLE, BUTTON_FONT_STYLE
 
 
 
@@ -38,6 +39,7 @@ class MainMenuWidget(QWidget):
 		title.setAlignment(Qt.AlignmentFlag.AlignTop)
 		title.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 		title.setStyleSheet("font-size: 35px; font-weight: 700;")
+		title.setStyleSheet(TITLE_STYLE)
 		shadow = QGraphicsDropShadowEffect(self)
 		shadow.setBlurRadius(18)
 		shadow.setOffset(0, 3)
@@ -61,7 +63,7 @@ class MainMenuWidget(QWidget):
 			btn = QPushButton(button)
 			btn.setEnabled(True)
 			btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-			btn.setStyleSheet("font-size: 20px;")
+			btn.setStyleSheet(BUTTON_FONT_STYLE)
 			btn.setCursor(Qt.CursorShape.PointingHandCursor)
 			btn.setMinimumWidth(400)
 			btn.setMinimumHeight(40)
@@ -83,46 +85,8 @@ class MainMenuWidget(QWidget):
 
 		layout.addSpacing(220)
 
-		# Apply stylesheet for colors and buttons
-		self.setStyleSheet(r"""
-/* Solid black background for the main menu */
-#mainMenu {
-    background-color: #000000;
-}
-
-/* Title and subtitle styling */
-#title {
-    color: #ffffff;
-    letter-spacing: 1px;
-	font-family: "SF Pro Display", sans-serif;
-}
-#subtitle {
-    color: #cfe8e6;
-    font-size: 14px;
-}
-
-/* Buttons: modern rounded gradient with hover/pressed states */
-QPushButton {
-    color: #000000;
-    /* Darker green gradient */
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #245c1a, stop:1 #388e3c);
-    border: none;
-    border-radius: 10px;
-    padding: 10px 18px;
-}
-QPushButton:hover {
-    /* Slightly brighter dark green on hover */
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2e7031, stop:1 #43a047);
-}
-QPushButton:pressed {
-    /* Even darker green when pressed */
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1b3c13, stop:1 #2e7031);
-}
-QPushButton:disabled {
-    background: #666b75;
-    color: #cfcfcf;
-}
-""")
+		# Apply shared stylesheet
+		self.setStyleSheet(MAIN_MENU_STYLESHEET)
 
 
 	# Show the home (main menu) page
