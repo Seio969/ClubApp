@@ -152,31 +152,7 @@ class MembersMenuView(QWidget):
         main_layout.addWidget(central)
 
         # Small, pleasant stylesheet to make layout readable
-        self.setStyleSheet(r"""
-        #membersMenu { background: #fafafa; }
-        #topBar { background: transparent; }
-        #viewsLabel { font-weight: 600; margin-right: 6px; }
-        QPushButton { min-width: 90px; min-height: 28px; }
-        #backButton { 
-            background-color: #f0f0f0; 
-            border: 1px solid #ccc; 
-            border-radius: 4px; 
-            font-weight: bold;
-            color: #333;
-        }
-        #backButton:hover { 
-            background-color: #e0e0e0; 
-            border-color: #999; 
-        }
-        #backButton:pressed { 
-            background-color: #d0d0d0; 
-        }
-        #resultsTable { background: #ffffff; }
-        """)
-
-        # For quick visual testing: populate the views dropdown menu with demo
-        # entries so you can press the arrow and see it expand downward.
-        # This can be removed in production.
+        self.setStyleSheet(MEMBERS_MENU_STYLESHEET)
         self._populate_demo_views()
 
     # ---------------------- placeholder event handlers -------------------------
