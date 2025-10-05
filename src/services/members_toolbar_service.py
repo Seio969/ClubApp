@@ -99,3 +99,20 @@ class MembersService:
         export capabilities.
         """
         print(f"MembersService.export_members(): placeholder to {destination}")
+
+    def register_transactions(self, table: Any, model: Any) -> None:
+        """Placeholder for registering charges/payments/returns.
+
+        In the future this will open a dialog or wizard to record financial
+        movements (cargos, pagos, devoluciones) tied to a member. For now it
+        logs context so the UI flow can be exercised.
+        """
+        if table is None or model is None:
+            print("MembersService.register_transactions: no table/model provided")
+            return
+        sel = table.selectionModel().selectedRows()
+        if not sel:
+            print("MembersService.register_transactions: no member selected - opening general register")
+        else:
+            rows = [s.row() for s in sel]
+            print(f"MembersService.register_transactions: selected rows={rows}")

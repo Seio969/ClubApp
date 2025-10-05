@@ -68,6 +68,12 @@ class MembersToolBar(QToolBar):
         act_export = self.addAction(icon_export, "Exportar")
         act_export.setToolTip("Exportar resultados")
         act_export.triggered.connect(self.on_export)
+        
+        # Registrar cargos, pagos y reembolsos (placeholder for future behaviour)
+        icon_register = self.style().standardIcon(QStyle.SP_DialogOpenButton)
+        act_register = self.addAction(icon_register, "Registrar")
+        act_register.setToolTip("Registrar cargos, pagos y devoluciones")
+        act_register.triggered.connect(self.on_register_movements)
 
     def set_table_references(self, table: QTableView, model: QStandardItemModel) -> None:
         """Set references to the table view and model for toolbar operations."""
@@ -93,3 +99,12 @@ class MembersToolBar(QToolBar):
     def on_export(self) -> None:
         """Handle export action."""
         self.service.export_members(self.model)
+
+    def on_register_movements(self) -> None:
+        """Handle register movements action (cargos / pagos / devoluciones).
+
+        Currently a placeholder that delegates to the service layer. The
+        service will implement detailed dialogs and persistence in the future.
+        """
+        # Pass table and model so future implementation can inspect selection/context
+        self.service.register_transactions(self.table, self.model)
