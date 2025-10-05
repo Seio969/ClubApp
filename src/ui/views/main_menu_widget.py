@@ -1,3 +1,4 @@
+
 """Simple home/main menu widget."""
 
 from __future__ import annotations
@@ -6,7 +7,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-	QGridLayout,
+    QGridLayout,
     QLabel,
     QPushButton,
     QSizePolicy,
@@ -18,7 +19,6 @@ from ui.views.members.members_menu_view import show_members_view
 from ui.styles import MAIN_MENU_STYLESHEET, TITLE_STYLE, BUTTON_FONT_STYLE
 
 
-
 class MainMenuWidget(QWidget):
 	"""Main menu used as the application's home page."""
 
@@ -27,7 +27,6 @@ class MainMenuWidget(QWidget):
 		self.main_window = main_window
 		self._members_view = None
 
-		# Used by the stylesheet
 		self.setObjectName("mainMenu")
 
 		layout = QVBoxLayout(self)
@@ -38,7 +37,6 @@ class MainMenuWidget(QWidget):
 		title.setObjectName("title")
 		title.setAlignment(Qt.AlignmentFlag.AlignTop)
 		title.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-		title.setStyleSheet("font-size: 35px; font-weight: 700;")
 		title.setStyleSheet(TITLE_STYLE)
 		shadow = QGraphicsDropShadowEffect(self)
 		shadow.setBlurRadius(18)
@@ -53,7 +51,7 @@ class MainMenuWidget(QWidget):
 
 		buttons_main_menu = [
 			"🧑‍🤝‍🧑 Gestionar Miembros",
-			"⚙️ Ajustes"
+			"⚙️ Ajustes",
 		]
 
 		columns = 2
@@ -85,21 +83,11 @@ class MainMenuWidget(QWidget):
 
 		layout.addSpacing(220)
 
-		# Apply shared stylesheet
 		self.setStyleSheet(MAIN_MENU_STYLESHEET)
 
-
-	# Show the home (main menu) page
 	def show_home(self) -> None:
 		"""Switch to the home (main menu) page."""
 		self.main_window._stack.setCurrentWidget(self.main_window._home)
 
-	# New helper methods for the menu actions
-
-
-	# Menu-related callbacks have been centralized in MainWindow. The widget
-	# no longer needs to implement _toggle_fullscreen, _show_about or
-	# _not_implemented; the MainWindow provides those and passes them to the
-	# shared create_menu_bar helper during initialization.
 
 
