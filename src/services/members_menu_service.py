@@ -19,9 +19,14 @@ class MembersMenuService:
     objects or return pure data that the UI can consume.
     """
 
-    def search_members(self, text: str, model: Any) -> int:
+    def search_members(self, text: str, model: Any, limit: Optional[int] = None) -> int:
         """Populate the provided model with results for `text`.
 
+        Args:
+            text: Search text to filter members
+            model: Qt model to populate with results
+            limit: Optional limit on number of rows to return
+            
         Returns number of rows added.
         """
         if model is None:
@@ -37,10 +42,18 @@ class MembersMenuService:
             # Import Qt item lazily to avoid coupling at module import time
             from PySide6.QtGui import QStandardItem
 
-            row = [QStandardItem("1"), QStandardItem(text), QStandardItem("n/a@example.com"), QStandardItem("Activo")]
-            model.appendRow(row)
-            print(f"MembersMenuService.search_members: added 1 row for '{text}'")
-            return 1
+            # For now, this is still a demo implementation
+            # In a real app, this would query the database with the search text and limit
+            actual_limit = limit if limit is not None else 100
+            
+            # Demo: create one row with search text (limited by the limit parameter)
+            if actual_limit > 0:
+                row = [QStandardItem("1"), QStandardItem(text), QStandardItem("n/a@example.com"), QStandardItem("Activo")]
+                model.appendRow(row)
+                print(f"MembersMenuService.search_members: added 1 row for '{text}' (limit: {actual_limit})")
+                return 1
+            else:
+                return 0
         except Exception as exc:
             print("MembersMenuService.search_members: failed -", exc)
             return 0
@@ -55,8 +68,14 @@ class MembersMenuService:
     def get_views(self) -> List[str]:
         return self._view_registry.get_views()
 
-    def fetch_view(self, name: str, model: Any, limit: int = 500) -> int:
-        """Fetch a registered view (table/sql/callable) and populate the Qt model."""
+    def fetch_view(self, name: str, model: Any, limit: Optional[int] = None) -> int:
+        """Fetch a registered view (table/sql/callable) and populate the Qt model.
+        
+        Args:
+            name: Name of the view to fetch
+            model: Qt model to populate
+            limit: Optional limit on number of rows. If None, fetches all rows.
+        """
         if model is None:
             print("MembersMenuService.fetch_view: no model provided")
             return 0
@@ -76,8 +95,14 @@ class MembersMenuService:
             print("MembersMenuService.fetch_view: failed -", exc)
             return 0
 
-    def fetch_table(self, table_name: str, model: Any, limit: int = 500) -> int:
-        """Backward-compatible helper: fetch a table by name and populate model."""
+    def fetch_table(self, table_name: str, model: Any, limit: Optional[int] = None) -> int:
+        """Backward-compatible helper: fetch a table by name and populate model.
+        
+        Args:
+            table_name: Name of the table to fetch
+            model: Qt model to populate  
+            limit: Optional limit on number of rows. If None, fetches all rows.
+        """
         return self.fetch_view(table_name, model, limit=limit)
 
     def get_filter_labels(self, model: Optional[Any]) -> List[str]:

@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QAbstractItemView,
 )
-from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction, QIntValidator
 from PySide6.QtCore import Qt, QSize
 
 from .members_toolbar import MembersToolBar
@@ -52,6 +52,7 @@ class MembersMenuView(QWidget):
         super().__init__(parent)
         self.setObjectName("membersMenu")
         self.main_window = parent  # Store reference to main window for navigation
+        self._current_view_name = None  # Track currently loaded view for refreshing
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(8, 8, 8, 8)
@@ -111,6 +112,32 @@ class MembersMenuView(QWidget):
         # Use stretches to keep the search area visually centered between left and right groups
         top_layout.addStretch(1)
         top_layout.addWidget(center_group, 0, Qt.AlignmentFlag.AlignCenter)
+        
+        # Middle group: limit entry
+        middle_group = QWidget(top_bar)
+        middle_group.setObjectName("topMiddleGroup")
+        middle_layout = QHBoxLayout(middle_group)
+        middle_layout.setContentsMargins(0, 0, 0, 0)
+        middle_layout.setSpacing(6)
+
+        limit_label = QLabel("Límite:")
+        limit_label.setToolTip("Número máximo de resultados a mostrar")
+        middle_layout.addWidget(limit_label)
+
+        self.limit_input = QLineEdit(middle_group)
+        self.limit_input.setPlaceholderText("")
+        self.limit_input.setText("0")  # Default value
+        self.limit_input.setToolTip("Número máximo de resultados a mostrar (por defecto 100)")
+        self.limit_input.setMaximumWidth(80)
+        self.limit_input.setMinimumHeight(34)
+        self.limit_input.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        # Only allow numbers
+        self.limit_input.setValidator(QIntValidator(1, 99999, self))
+        # Refresh view when Enter is pressed
+        self.limit_input.returnPressed.connect(self.on_limit_changed)
+        middle_layout.addWidget(self.limit_input)
+
+        top_layout.addWidget(middle_group, 0, Qt.AlignmentFlag.AlignCenter)
         top_layout.addStretch(1)
 
         # Right group: views menu and (future) actions
@@ -251,6 +278,21 @@ class MembersMenuView(QWidget):
             action.toggled.connect(lambda checked, idx=col: self.table.setColumnHidden(idx, not checked))
             self.filters_menu.addAction(action)
 
+    def get_limit(self) -> int:
+        """Get the limit value from the limit input field.
+        
+        Returns:
+            int: The limit value, defaults to 100 if invalid or empty.
+        """
+        try:
+            text = self.limit_input.text().strip()
+            if not text:
+                return 100  # Default limit
+            limit = int(text)
+            return max(1, min(limit, 99999))  # Ensure within valid range
+        except (ValueError, AttributeError):
+            return 100  # Default limit on error
+
     def on_search(self) -> None:
         """Perform a simple search using the text in the top bar input.
 
@@ -258,10 +300,34 @@ class MembersMenuView(QWidget):
         row containing the search text to show data flow.
         """
         text = self.search_input.text().strip()
-        print(f"Buscar: '{text}'")
+        limit = self.get_limit()
+        print(f"Buscar: '{text}' con límite: {limit}")
         # Delegate search/population to service
-        added = self._service.search_members(text, self.model)
+        added = self._service.search_members(text, self.model, limit=limit)
         print(f"Search added {added} rows")
+
+    def on_limit_changed(self) -> None:
+        """Handle when user presses Enter in the limit input field.
+        
+        This will refresh the current view with the new limit.
+        """
+        limit = self.get_limit()
+        print(f"Límite cambiado a: {limit}")
+        
+        # If we have a current view loaded, refresh it with the new limit
+        if hasattr(self, '_current_view_name') and self._current_view_name:
+            print(f"Refrescando vista '{self._current_view_name}' con nuevo límite")
+            try:
+                self.load_table_view(self._current_view_name)
+            except Exception as exc:
+                print(f"Error al refrescar vista con nuevo límite: {exc}")
+        else:
+            # If no specific view is loaded, try to refresh the table
+            print("Refrescando tabla con nuevo límite")
+            try:
+                self.refresh_table()
+            except Exception as exc:
+                print(f"Error al refrescar tabla con nuevo límite: {exc}")
 
 
     def _populate_db_views(self) -> None:
@@ -288,10 +354,12 @@ class MembersMenuView(QWidget):
         (table/sql/callable) and populates the model.
         """
         print(f"Cargando vista: {table_name}")
+        limit = self.get_limit()
+        print(f"Aplicando límite: {limit}")
         # remember which view is currently loaded so refresh can re-run it
         self._current_view_name = table_name
-        added = self._service.fetch_view(table_name, self.model)
-        print(f"Cargadas {added} filas desde vista '{table_name}'")
+        added = self._service.fetch_view(table_name, self.model, limit=limit)
+        print(f"Cargadas {added} filas desde vista '{table_name}' con límite {limit}")
         # Refresh filters menu to match new columns
         self._populate_filters_menu()
 

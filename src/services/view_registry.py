@@ -51,29 +51,45 @@ class ViewRegistry:
     def get_views(self) -> List[str]:
         return list(self._views.keys())
 
-    def fetch_table(self, table_name: str, limit: int = 500) -> Tuple[List[str], List[tuple]]:
+    def fetch_table(self, table_name: str, limit: Optional[int] = None) -> Tuple[List[str], List[tuple]]:
         """Return (keys, rows) for SELECT * FROM table_name.
 
         This returns data rather than mutating a Qt model so the caller
         can decide how to populate the UI.
+        
+        Args:
+            table_name: Name of the database table to fetch
+            limit: Optional limit on number of rows. If None, fetches all rows.
         """
         try:
             if table_name not in self.get_db_tables():
                 raise ValueError(f"Unknown table: {table_name}")
-            stmt = text(f'SELECT * FROM "{table_name}" LIMIT :limit')
-            with engine.connect() as conn:
-                res = conn.execute(stmt, {"limit": limit})
-                rows = res.fetchall()
-                keys = list(res.keys())
+            
+            if limit is not None:
+                stmt = text(f'SELECT * FROM "{table_name}" LIMIT :limit')
+                with engine.connect() as conn:
+                    res = conn.execute(stmt, {"limit": limit})
+                    rows = res.fetchall()
+                    keys = list(res.keys())
+            else:
+                stmt = text(f'SELECT * FROM "{table_name}"')
+                with engine.connect() as conn:
+                    res = conn.execute(stmt)
+                    rows = res.fetchall()
+                    keys = list(res.keys())
             return keys, rows
         except Exception as exc:
             print("ViewRegistry.fetch_table: failed -", exc)
             return [], []
 
-    def fetch_view(self, name: str, limit: int = 500) -> Tuple[List[str], List[tuple]]:
+    def fetch_view(self, name: str, limit: Optional[int] = None) -> Tuple[List[str], List[tuple]]:
         """Fetch a registered view and return (keys, rows).
 
         Supports table, sql and callable view types.
+        
+        Args:
+            name: Name of the registered view or table
+            limit: Optional limit on number of rows. If None, fetches all rows.
         """
         if name not in self._views:
             # fallback: if name matches a db table, fetch it
@@ -92,12 +108,20 @@ class ViewRegistry:
             if vtype == "sql":
                 sql = entry["value"]
                 try:
-                    stmt = text(f"{sql} LIMIT :limit")
-                    with engine.connect() as conn:
-                        res = conn.execute(stmt, {"limit": limit})
-                        rows = res.fetchall()
-                        keys = list(res.keys())
+                    if limit is not None:
+                        stmt = text(f"{sql} LIMIT :limit")
+                        with engine.connect() as conn:
+                            res = conn.execute(stmt, {"limit": limit})
+                            rows = res.fetchall()
+                            keys = list(res.keys())
+                    else:
+                        stmt = text(sql)
+                        with engine.connect() as conn:
+                            res = conn.execute(stmt)
+                            rows = res.fetchall()
+                            keys = list(res.keys())
                 except Exception:
+                    # Fallback: execute raw SQL without limit
                     with engine.connect() as conn:
                         res = conn.execute(text(sql))
                         rows = res.fetchall()
@@ -107,6 +131,9 @@ class ViewRegistry:
             if vtype == "callable":
                 func = entry["value"]
                 keys, rows = func()
+                # Note: callable views don't support limit - they return whatever they return
+                if limit is not None and len(rows) > limit:
+                    rows = rows[:limit]
                 return list(keys), list(rows)
 
         except Exception as exc:
