@@ -47,8 +47,8 @@ class MainMenuBar(QMenuBar):
 
         QMessageBox.about(
             self.main_window,
-            "About Club Social Paraiso",
-            "Sistema de gestión del Club Social Paraiso\n\nVersión 1.0",
+            "About Club Social Paraiso App",
+            "Sistema de gestión del Club Social Paraiso\n\nVersión 1.0\n\nDesarrollado por\nSergio Alfonso Gutierrez.",
         )
 
     def not_implemented(self, name: str, *_args) -> None:
