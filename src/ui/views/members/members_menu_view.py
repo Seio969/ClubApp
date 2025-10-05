@@ -264,18 +264,6 @@ class MembersMenuView(QWidget):
         print(f"Search added {added} rows")
 
 
-
-    def _populate_demo_views(self, count: int = 12) -> None:
-        """Add demo actions to the views dropdown menu to demonstrate the
-        downward-expanding menu behaviour.
-
-        Each action will call `on_select_view` with the view name.
-        """
-        self.views_menu.clear()
-        for name in self._service.get_demo_views(count):
-            action = self.views_menu.addAction(name)
-            action.triggered.connect(lambda checked=False, n=name: self.on_select_view(n))
-
     def _populate_db_views(self) -> None:
         """Populate the views dropdown with actual database table names."""
         self.views_menu.clear()
