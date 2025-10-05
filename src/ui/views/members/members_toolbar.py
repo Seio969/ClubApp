@@ -116,17 +116,22 @@ class MembersToolBar(QToolBar):
 
     def on_refresh(self) -> None:
         """Handle refresh action."""
-        # Service returns plain row data; UI converts to QStandardItem rows
-        rows = self.service.refresh_members()
-        if self.model is None:
-            return
-        try:
-            self.model.removeRows(0, self.model.rowCount())
-            for row in rows:
-                items = [QStandardItem(c) for c in row]
-                self.model.appendRow(items)
-        except Exception as exc:
-            print("MembersToolBar.on_refresh: failed to populate model -", exc)
+    # If the parent view provides a refresh_table method prefer that so
+    # the UI reloads the actual DB-backed view. If not available, do
+    # nothing (avoid inserting demo/sample rows).
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "refresh_table"):
+            try:
+                parent.refresh_table()
+                return
+            except Exception as exc:
+                print("MembersToolBar.on_refresh: parent.refresh_table failed -", exc)
+
+        # No parent refresh available. Previously we fell back to a
+        # sample-data helper; that behaviour populated demo rows which is
+        # undesirable. Keep this a no-op and let callers provide a proper
+        # refresh_table implementation on the parent view.
+        print("MembersToolBar.on_refresh: no parent.refresh_table available - nothing to refresh")
 
     def on_export(self) -> None:
         """Handle export action."""

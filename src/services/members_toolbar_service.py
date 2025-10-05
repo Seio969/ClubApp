@@ -56,16 +56,6 @@ class MembersService:
         print(f"MembersService.delete_members: will remove {len(rows)} rows: {rows}")
         return rows
 
-    def refresh_members(self, sample_count: int = 5) -> List[List[str]]:
-        """Return plain row data to populate the UI model.
-
-        Each row is a list of string values: [id, name, email, status].
-        """
-        data: List[List[str]] = []
-        for i in range(1, sample_count + 1):
-            data.append([str(i), f"Miembro {i}", f"m{i}@example.com", "Activo"])
-        print(f"MembersService.refresh_members: prepared {len(data)} sample rows")
-        return data
 
     def export_members(self, rows: Optional[List[List[str]]] = None, destination: Optional[str] = None) -> None:
         """Export plain rows to a destination (placeholder).

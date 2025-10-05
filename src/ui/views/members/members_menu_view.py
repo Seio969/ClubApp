@@ -198,6 +198,10 @@ class MembersMenuView(QWidget):
         # Populate views dropdown dynamically from service-registered views
         self._populate_db_views()
 
+        # Track the currently loaded view name so the toolbar can request a
+        # refresh that reloads the same data from the DB.
+        self._current_view_name: Optional[str] = None
+
         # Try to load the first registered view automatically (if any)
         try:
             views = self._service.get_views()
@@ -296,10 +300,35 @@ class MembersMenuView(QWidget):
         populates the model.
         """
         print(f"Cargando vista: {table_name}")
+        # remember which view is currently loaded so refresh can re-run it
+        self._current_view_name = table_name
         added = self._service.fetch_view(table_name, self.model)
         print(f"Cargadas {added} filas desde vista '{table_name}'")
         # Refresh filters menu to match new columns
         self._populate_filters_menu()
+
+    def refresh_table(self) -> None:
+        """Reload the currently selected/loaded table view.
+
+        This re-invokes the same logic as `load_table_view` for the
+        previously loaded view name. If no view is loaded, try to load
+        the first available view from the service.
+        """
+        if self._current_view_name:
+            try:
+                self.load_table_view(self._current_view_name)
+            except Exception as exc:
+                print("MembersMenuView.refresh_table: failed -", exc)
+            return
+
+        # No current view selected; attempt to load the first registered view
+        try:
+            views = self._service.get_views()
+            if views:
+                self.load_table_view(views[0])
+        except Exception:
+            # nothing to refresh
+            pass
 
 
 
