@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction, QIntValidator
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QEvent
 import unicodedata
 from utils.logger import get_logger
 logger = get_logger(__name__)
@@ -37,8 +37,6 @@ logger = get_logger(__name__)
 from .members_toolbar import MembersToolBar
 from ui.styles import MEMBERS_MENU_STYLESHEET
 from services.members_menu_service import MembersMenuService
-
-
 class MembersMenuView(QWidget):
     """Members menu view widget.
 
@@ -194,7 +192,8 @@ class MembersMenuView(QWidget):
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(12)
 
-        # Left: results table
+        # Left: results table (interactive yet stretchable behaviour added
+        # via ensure_columns_fill helper and a small resize event filter)
         self.table = QTableView(central)
         self.table.setObjectName("resultsTable")
         self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -204,10 +203,11 @@ class MembersMenuView(QWidget):
         # Minimal model. Real app should replace with a proper model connected to DB.
         self.model = QStandardItemModel(0, 4, self)
         self.table.setModel(self.model)
+
         header = self.table.horizontalHeader()
-        # Allow the user to resize columns interactively instead of forcing
-        # all columns to stretch. Provide a sensible default section size and
-        # allow moving sections if desired.
+        # Keep interactive resizing (user can drag). We'll implement a
+        # behavior that expands columns to fill extra space but doesn't
+        # force a fixed stretch mode which would prevent interactive resize.
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setDefaultSectionSize(120)
         header.setStretchLastSection(False)
@@ -264,6 +264,71 @@ class MembersMenuView(QWidget):
                     self.load_table_view(chosen)
         except Exception:
             pass
+
+        # Ensure columns fill available width initially (model may be empty)
+        try:
+            self.ensure_columns_fill()
+        except Exception:
+            pass
+
+        # Install an event filter on the table viewport so we can react to
+        # resize events and re-distribute extra space while keeping the
+        # interactive resize mode enabled.
+        def _viewport_event_filter(obj, ev):
+            if ev.type() == QEvent.Type.Resize:
+                try:
+                    self.ensure_columns_fill()
+                except Exception:
+                    pass
+            return False
+
+        self.table.viewport().installEventFilter(self)
+
+    def eventFilter(self, obj, ev):
+        # Handle viewport resize events
+        if obj is not None and ev.type() == QEvent.Type.Resize and obj is self.table.viewport():
+            try:
+                self.ensure_columns_fill()
+            except Exception:
+                pass
+        return super().eventFilter(obj, ev)
+
+    def ensure_columns_fill(self) -> None:
+        """Ensure visible columns expand to fill available viewport width
+        while preserving interactive user-resize behavior.
+        """
+        header = self.table.horizontalHeader()
+        model = self.model
+        if model is None:
+            return
+        col_count = model.columnCount()
+        if col_count <= 0:
+            return
+
+        avail = self.table.viewport().width()
+        visible_cols = [c for c in range(col_count) if not self.table.isColumnHidden(c)]
+        if not visible_cols:
+            return
+
+        total = sum(header.sectionSize(c) for c in visible_cols)
+        if total >= avail or total == 0:
+            if total == 0:
+                default = header.defaultSectionSize()
+                for c in visible_cols:
+                    header.resizeSection(c, default)
+            return
+
+        extra = avail - total
+        allocated = 0
+        for i, c in enumerate(visible_cols):
+            if i == len(visible_cols) - 1:
+                inc = extra - allocated
+            else:
+                size = header.sectionSize(c)
+                share = size / total if total > 0 else 1.0 / len(visible_cols)
+                inc = int(round(share * extra))
+                allocated += inc
+            header.resizeSection(c, header.sectionSize(c) + inc)
 
     # Track the currently loaded view name so the toolbar can request a
     # refresh that reloads the same data from the DB.
@@ -346,6 +411,11 @@ class MembersMenuView(QWidget):
         # Delegate search/population to service
         added = self._service.search_members(text, self.model, limit=limit)
         logger.info("Search added %d rows", added)
+        # After populating the model, ensure columns fill the available width
+        try:
+            self.ensure_columns_fill()
+        except Exception:
+            pass
 
     def on_limit_changed(self) -> None:
         """Handle when user presses Enter in the limit input field.
@@ -413,6 +483,11 @@ class MembersMenuView(QWidget):
         except Exception:
             # Non-critical; ignore reapply failures
             logger.debug("_maybe_reapply_sort failed (ignored)")
+        # Ensure columns expand to fill the area after model load
+        try:
+            self.ensure_columns_fill()
+        except Exception:
+            pass
 
     def refresh_table(self) -> None:
         """Reload the currently selected/loaded table view.
@@ -550,6 +625,11 @@ class MembersMenuView(QWidget):
             header = self.table.horizontalHeader()
             header.setSortIndicator(self._sort_column, self._sort_order)
             header.setSortIndicatorShown(True)
+            # After sorting and repopulating the model, ensure columns fill
+            try:
+                self.ensure_columns_fill()
+            except Exception:
+                pass
         except Exception as exc:
             print("Failed to apply sort:", exc)
 
