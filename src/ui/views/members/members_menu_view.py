@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction, QIntValidator
 from PySide6.QtCore import Qt, QSize
+import unicodedata
 
 from .members_toolbar import MembersToolBar
 from ui.styles import MEMBERS_MENU_STYLESHEET
@@ -431,8 +432,52 @@ class MembersMenuView(QWidget):
             # nothing to refresh
             pass
 
-    # TODO handle tildes and accents in sorting and searching
+    # Handle tildes and accents in sorting and searching by normalizing
+    # text values to a diacritic-free form and using that for comparisons.
     # ---------------------- sorting helpers -------------------------
+
+    def _normalize_for_sort(self, value: str) -> str:
+        """Return a lowercase, diacritic-free version of the string for sorting.
+
+        This converts characters like 'á' -> 'a', 'ñ' -> 'n', etc., and
+        performs a casefold to make comparisons case-insensitive.
+        """
+        if value is None:
+            return ""
+        try:
+            # Ensure we are working with a string
+            s = str(value)
+            # Normalize to NFKD and drop combining marks (diacritics)
+            nkfd = unicodedata.normalize("NFKD", s)
+            stripped = "".join(ch for ch in nkfd if not unicodedata.combining(ch))
+            # Use casefold for aggressive case-insensitive compare
+            return stripped.casefold().strip()
+        except Exception:
+            return str(value).casefold() if value is not None else ""
+
+    def _make_sort_key(self, raw: str):
+        """Create a sort key that prefers numeric sorting when values look numeric.
+
+        Returns a tuple where the first element is 0 for numeric values and 1
+        for text values so numbers sort before text when mixed. The second
+        element is the numeric value or the normalized text.
+        """
+        if raw is None:
+            return (1, "")
+        s = str(raw).strip()
+        # Try integer first, then float
+        try:
+            ival = int(s)
+            return (0, ival)
+        except Exception:
+            pass
+        try:
+            fval = float(s)
+            return (0, fval)
+        except Exception:
+            pass
+        # Fallback to normalized text
+        return (1, self._normalize_for_sort(s))
     def _on_header_clicked(self, index: int) -> None:
         """Handle clicks on header sections to toggle sort state.
 
@@ -466,9 +511,43 @@ class MembersMenuView(QWidget):
         if self._sort_column is None or self._sort_order is None:
             return
         try:
-            # Use the model's sort to order rows
-            # QStandardItemModel.sort expects (column, order)
-            self.model.sort(self._sort_column, self._sort_order)
+            col = self._sort_column
+            ascending = self._sort_order == Qt.SortOrder.AscendingOrder
+
+            # Extract all rows as lists of text values
+            rows = []
+            row_count = self.model.rowCount()
+            col_count = self.model.columnCount()
+            for r in range(row_count):
+                vals = []
+                for c in range(col_count):
+                    item = self.model.item(r, c)
+                    vals.append("") if item is None else vals.append(item.text())
+                rows.append(vals)
+
+            # Stable sort using keys that remove diacritics and prefer numeric ordering
+            rows.sort(key=lambda rv: self._make_sort_key(rv[col]), reverse=not ascending)
+
+            # Repopulate model preserving header labels
+            from PySide6.QtGui import QStandardItem
+
+            # Capture headers
+            try:
+                from PySide6.QtCore import Qt as _Qt
+                headers = [self.model.headerData(c, _Qt.Orientation.Horizontal) for c in range(col_count)]
+            except Exception:
+                headers = [self.model.headerData(c, Qt.Orientation.Horizontal) for c in range(col_count)]
+
+            # Clear and rebuild
+            self.model.removeRows(0, self.model.rowCount())
+            self.model.setColumnCount(col_count)
+            if headers:
+                self.model.setHorizontalHeaderLabels([str(h) if h is not None else "" for h in headers])
+
+            for vals in rows:
+                items = [QStandardItem("" if v is None else str(v)) for v in vals]
+                self.model.appendRow(items)
+
             header = self.table.horizontalHeader()
             header.setSortIndicator(self._sort_column, self._sort_order)
             header.setSortIndicatorShown(True)
