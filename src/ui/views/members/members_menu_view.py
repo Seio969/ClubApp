@@ -203,7 +203,13 @@ class MembersMenuView(QWidget):
         self.model.setHorizontalHeaderLabels(["ID", "Nombre", "Email", "Estado"])
         self.table.setModel(self.model)
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        # Allow the user to resize columns interactively instead of forcing
+        # all columns to stretch. Provide a sensible default section size and
+        # allow moving sections if desired.
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setDefaultSectionSize(120)
+        header.setStretchLastSection(False)
+        header.setSectionsMovable(True)
         
         # Set table and model references for the toolbar
         self.toolbar.set_table_references(self.table, self.model)
