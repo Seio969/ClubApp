@@ -210,6 +210,17 @@ class MembersMenuView(QWidget):
         header.setDefaultSectionSize(120)
         header.setStretchLastSection(False)
         header.setSectionsMovable(True)
+
+        # Allow clicking headers to trigger sorting behavior
+        header.setSectionsClickable(True)
+        header.setSortIndicatorShown(False)
+        header.sectionClicked.connect(self._on_header_clicked)
+
+        # Track sorting state: None means no sorting active
+        self._sort_column = None
+        self._sort_order = None
+        # Remember last search text so we can restore search results when clearing sort
+        self._last_search_text = None
         
         # Set table and model references for the toolbar
         self.toolbar.set_table_references(self.table, self.model)
@@ -327,6 +338,8 @@ class MembersMenuView(QWidget):
         """
         text = self.search_input.text().strip()
         limit = self.get_limit()
+        # remember last search so clearing sort can re-run it
+        self._last_search_text = text
         print(f"Buscar: '{text}' con límite: {limit}")
         # Delegate search/population to service
         added = self._service.search_members(text, self.model, limit=limit)
@@ -388,6 +401,12 @@ class MembersMenuView(QWidget):
         print(f"Cargadas {added} filas desde vista '{table_name}' con límite {limit}")
         # Refresh filters menu to match new columns
         self._populate_filters_menu()
+        # If a sort is currently active, try to re-apply it on the newly loaded model
+        try:
+            self._maybe_reapply_sort()
+        except Exception:
+            # Non-critical; ignore reapply failures
+            pass
 
     def refresh_table(self) -> None:
         """Reload the currently selected/loaded table view.
@@ -410,6 +429,112 @@ class MembersMenuView(QWidget):
                 self.load_table_view(views[0])
         except Exception:
             # nothing to refresh
+            pass
+
+    # TODO handle tildes and accents in sorting and searching
+    # ---------------------- sorting helpers -------------------------
+    def _on_header_clicked(self, index: int) -> None:
+        """Handle clicks on header sections to toggle sort state.
+
+        Cycle: (no sort) -> ASC -> DESC -> (no sort)
+        Clicking a different column restarts the cycle on that column.
+        """
+        try:
+            # Determine next state
+            if self._sort_column is None or self._sort_column != index:
+                # New column selected -> start with ascending
+                self._sort_column = index
+                self._sort_order = Qt.SortOrder.AscendingOrder
+                self._apply_sort()
+                return
+
+            # Same column clicked again -> toggle
+            if self._sort_order == Qt.SortOrder.AscendingOrder:
+                self._sort_order = Qt.SortOrder.DescendingOrder
+                self._apply_sort()
+                return
+
+            if self._sort_order == Qt.SortOrder.DescendingOrder:
+                # Third click: clear sorting and restore original order
+                self._clear_sort()
+                return
+        except Exception as exc:
+            print("Header click sorting failed:", exc)
+
+    def _apply_sort(self) -> None:
+        """Apply the current sort to the model and show indicator."""
+        if self._sort_column is None or self._sort_order is None:
+            return
+        try:
+            # Use the model's sort to order rows
+            # QStandardItemModel.sort expects (column, order)
+            self.model.sort(self._sort_column, self._sort_order)
+            header = self.table.horizontalHeader()
+            header.setSortIndicator(self._sort_column, self._sort_order)
+            header.setSortIndicatorShown(True)
+        except Exception as exc:
+            print("Failed to apply sort:", exc)
+
+    def _clear_sort(self) -> None:
+        """Clear any active sort and restore original data order.
+
+        Restoration strategy:
+        - If a DB-backed view is loaded, re-run load_table_view to fetch original order.
+        - Otherwise, re-run the last search (if any) to restore the previous dataset.
+        """
+        try:
+            self._sort_column = None
+            self._sort_order = None
+            header = self.table.horizontalHeader()
+            header.setSortIndicatorShown(False)
+
+            # Restore data depending on current context
+            if getattr(self, "_current_view_name", None):
+                # reload current view from service (original order)
+                try:
+                    self.load_table_view(self._current_view_name)
+                    return
+                except Exception:
+                    pass
+
+            # No current view: if we have a last search text, re-run search
+            if self._last_search_text is not None:
+                try:
+                    # on_search will repopulate model using remembered input
+                    # but ensure the input field still contains the same text
+                    self.search_input.setText(self._last_search_text)
+                    self.on_search()
+                    return
+                except Exception:
+                    pass
+
+            # Fallback: refresh table which may load a default view
+            try:
+                self.refresh_table()
+            except Exception:
+                pass
+        except Exception as exc:
+            print("Failed to clear sort:", exc)
+
+    def _maybe_reapply_sort(self) -> None:
+        """Re-apply active sort after the model has been (re)populated.
+
+        This is used after loading a view so user-visible sorting persists
+        across reloads when appropriate.
+        """
+        if self._sort_column is None or self._sort_order is None:
+            return
+        # Ensure column exists in new model
+        try:
+            col_count = self.model.columnCount()
+            if 0 <= self._sort_column < col_count:
+                self._apply_sort()
+            else:
+                # Invalid for this model: clear sort state and hide indicator
+                self._sort_column = None
+                self._sort_order = None
+                self.table.horizontalHeader().setSortIndicatorShown(False)
+        except Exception:
             pass
 
 
