@@ -65,7 +65,8 @@ class ViewRegistry:
             if table_name not in self.get_db_tables():
                 raise ValueError(f"Unknown table: {table_name}")
             
-            if limit is not None:
+            # Treat limit==0 as no limit
+            if limit is not None and limit != 0:
                 stmt = text(f'SELECT * FROM "{table_name}" LIMIT :limit')
                 with engine.connect() as conn:
                     res = conn.execute(stmt, {"limit": limit})
@@ -108,7 +109,8 @@ class ViewRegistry:
             if vtype == "sql":
                 sql = entry["value"]
                 try:
-                    if limit is not None:
+                    # Treat limit==0 as no limit
+                    if limit is not None and limit != 0:
                         stmt = text(f"{sql} LIMIT :limit")
                         with engine.connect() as conn:
                             res = conn.execute(stmt, {"limit": limit})
