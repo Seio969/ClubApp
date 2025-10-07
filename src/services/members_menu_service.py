@@ -44,16 +44,18 @@ class MembersMenuService:
 
             # For now, this is still a demo implementation
             # In a real app, this would query the database with the search text and limit
-            actual_limit = limit if limit is not None else 100
-            
-            # Demo: create one row with search text (limited by the limit parameter)
-            if actual_limit > 0:
+            # Treat limit==0 as no limit (None)
+            actual_limit = None if (limit is None or limit == 0) else limit
+
+            # FIXME: Replace with real DB query logic
+            # Demo: create one row with search text (only when limit isn't zero)
+            # If actual_limit is None (no limit) we still add the demo row.
+            if actual_limit is None or actual_limit > 0:
                 row = [QStandardItem("1"), QStandardItem(text), QStandardItem("n/a@example.com"), QStandardItem("Activo")]
                 model.appendRow(row)
                 print(f"MembersMenuService.search_members: added 1 row for '{text}' (limit: {actual_limit})")
                 return 1
-            else:
-                return 0
+            return 0
         except Exception as exc:
             print("MembersMenuService.search_members: failed -", exc)
             return 0
