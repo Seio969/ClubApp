@@ -31,6 +31,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction, QIntValidator
 from PySide6.QtCore import Qt
 import unicodedata
+from utils.logger import get_logger
+logger = get_logger(__name__)
 
 from .members_toolbar import MembersToolBar
 from ui.styles import MEMBERS_MENU_STYLESHEET
@@ -275,14 +277,14 @@ class MembersMenuView(QWidget):
         if self.main_window and hasattr(self.main_window, '_stack') and hasattr(self.main_window, '_home'):
             self.main_window._stack.setCurrentWidget(self.main_window._home)
         else:
-            print("No se pudo navegar al menú principal")
+            logger.warning("No se pudo navegar al menú principal")
 
     def on_select_view(self, name: str) -> None:
         """Called when the user clicks one of the view buttons in the top rolling bar.
 
         In a real app this would switch the visible table/model to the selected view.
         """
-        print(f"Seleccionada vista: {name}")
+        logger.info("Seleccionada vista: %s", name)
         # In a real app switching views would change the model/columns.
         # For now, repopulate the filters menu so it reflects the active model.
         self._populate_filters_menu()
@@ -340,10 +342,10 @@ class MembersMenuView(QWidget):
         limit = self.get_limit()
         # remember last search so clearing sort can re-run it
         self._last_search_text = text
-        print(f"Buscar: '{text}' con límite: {limit}")
+        logger.info("Buscar: '%s' con límite: %s", text, limit)
         # Delegate search/population to service
         added = self._service.search_members(text, self.model, limit=limit)
-        print(f"Search added {added} rows")
+        logger.info("Search added %d rows", added)
 
     def on_limit_changed(self) -> None:
         """Handle when user presses Enter in the limit input field.
@@ -351,22 +353,23 @@ class MembersMenuView(QWidget):
         This will refresh the current view with the new limit.
         """
         limit = self.get_limit()
-        print(f"Límite cambiado a: {limit if limit is not None else 'sin límite'}")
-        
+        logger.info("Límite cambiado a: %s", limit if limit is not None else 'sin límite')
+
         # If we have a current view loaded, refresh it with the new limit
         if hasattr(self, '_current_view_name') and self._current_view_name:
-            print(f"Refrescando vista '{self._current_view_name}' con nuevo límite")
+            logger.info("Refrescando vista '%s' con nuevo límite", self._current_view_name)
             try:
                 self.load_table_view(self._current_view_name)
             except Exception as exc:
-                print(f"Error al refrescar vista con nuevo límite: {exc}")
-        else:
-            # If no specific view is loaded, try to refresh the table
-            print("Refrescando tabla con nuevo límite")
-            try:
-                self.refresh_table()
-            except Exception as exc:
-                print(f"Error al refrescar tabla con nuevo límite: {exc}")
+                logger.exception("Error al refrescar vista con nuevo límite: %s", exc)
+            return
+
+        # If no specific view is loaded, try to refresh the table
+        logger.info("Refrescando tabla con nuevo límite")
+        try:
+            self.refresh_table()
+        except Exception as exc:
+            logger.exception("Error al refrescar tabla con nuevo límite: %s", exc)
 
 
     def _populate_db_views(self) -> None:
@@ -384,7 +387,7 @@ class MembersMenuView(QWidget):
                 action = self.views_menu.addAction(name)
                 action.triggered.connect(lambda checked=False, n=name: self.load_table_view(n))
         except Exception as exc:
-            print("MembersMenuView._populate_db_views: failed -", exc)
+            logger.exception("MembersMenuView._populate_db_views: failed - %s", exc)
 
     def load_table_view(self, table_name: str) -> None:
         """Load the named table into the results table by querying the DB.
@@ -392,21 +395,24 @@ class MembersMenuView(QWidget):
         This calls the service.fetch_view which validates/dispatches the view
         (table/sql/callable) and populates the model.
         """
-        print(f"Cargando vista: {table_name}")
+        logger.info("Cargando vista: %s", table_name)
         limit = self.get_limit()
-        print(f"Aplicando límite: {limit}")
+        logger.info("Aplicando límite: %s", limit)
+
         # remember which view is currently loaded so refresh can re-run it
         self._current_view_name = table_name
         added = self._service.fetch_view(table_name, self.model, limit=limit)
-        print(f"Cargadas {added} filas desde vista '{table_name}' con límite {limit}")
+        logger.info("Cargadas %d filas desde vista '%s' con límite %s", added, table_name, limit)
+
         # Refresh filters menu to match new columns
         self._populate_filters_menu()
+
         # If a sort is currently active, try to re-apply it on the newly loaded model
         try:
             self._maybe_reapply_sort()
         except Exception:
             # Non-critical; ignore reapply failures
-            pass
+            logger.debug("_maybe_reapply_sort failed (ignored)")
 
     def refresh_table(self) -> None:
         """Reload the currently selected/loaded table view.
@@ -419,7 +425,7 @@ class MembersMenuView(QWidget):
             try:
                 self.load_table_view(self._current_view_name)
             except Exception as exc:
-                print("MembersMenuView.refresh_table: failed -", exc)
+                logger.exception("MembersMenuView.refresh_table: failed - %s", exc)
             return
 
         # No current view selected; attempt to load the first registered view

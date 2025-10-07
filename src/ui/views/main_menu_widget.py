@@ -17,6 +17,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QAction
 from ui.views.members.members_menu_view import show_members_view
 from ui.styles import MAIN_MENU_STYLESHEET, TITLE_STYLE, BUTTON_FONT_STYLE
+from utils.logger import get_logger
+logger = get_logger(__name__)
 
 
 class MainMenuWidget(QWidget):
@@ -74,12 +76,9 @@ class MainMenuWidget(QWidget):
 
 			if button.startswith("🧑‍🤝‍🧑"):
 				btn.clicked.connect(lambda _checked=False, mw=self.main_window: show_members_view(mw))
-			if button.startswith("💸"):
-				btn.clicked.connect(lambda checked, b=button: print(f"{b} button clicked"))
-			if button.startswith("📊"):
-				btn.clicked.connect(lambda checked, b=button: print(f"{b} button clicked"))
+
 			if button.startswith("⚙️"):
-				btn.clicked.connect(lambda checked, b=button: print(f"{b} button clicked"))
+				btn.clicked.connect(lambda checked, b=button: logger.info("%s button clicked", b))
 
 		layout.addSpacing(220)
 

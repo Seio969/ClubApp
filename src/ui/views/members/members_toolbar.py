@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     from PySide6.QtWidgets import QWidget
 
 from services.members_toolbar_service import MembersService
+from utils.logger import get_logger
+logger = get_logger(__name__)
 
 
 class MembersToolBar(QToolBar):
@@ -125,13 +127,13 @@ class MembersToolBar(QToolBar):
                 parent.refresh_table()
                 return
             except Exception as exc:
-                print("MembersToolBar.on_refresh: parent.refresh_table failed -", exc)
+                logger.exception("MembersToolBar.on_refresh: parent.refresh_table failed - %s", exc)
 
         # No parent refresh available. Previously we fell back to a
         # sample-data helper; that behaviour populated demo rows which is
         # undesirable. Keep this a no-op and let callers provide a proper
         # refresh_table implementation on the parent view.
-        print("MembersToolBar.on_refresh: no parent.refresh_table available - nothing to refresh")
+    logger.info("MembersToolBar.on_refresh: no parent.refresh_table available - nothing to refresh")
 
     def on_export(self) -> None:
         """Handle export action."""

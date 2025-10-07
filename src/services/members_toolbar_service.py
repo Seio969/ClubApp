@@ -8,6 +8,8 @@ Qt-specific objects and conversions.
 from __future__ import annotations
 
 from typing import Callable, List, Optional, Any
+from utils.logger import get_logger
+logger = get_logger(__name__)
 
 
 class MembersService:
@@ -19,7 +21,7 @@ class MembersService:
 
     def add_member(self, parent: Optional[Any] = None) -> None:
         """Placeholder for creating a new member."""
-        print("MembersService.add_member(): placeholder")
+        logger.info("MembersService.add_member(): placeholder")
 
     def edit_member(self, selected_indices: List[int], model_getter: Optional[Callable[[int, int], Any]] = None) -> None:
         """Prepare an edit operation for the first selected index.
@@ -28,7 +30,7 @@ class MembersService:
         - model_getter: optional callable (row, col) -> item-like object
         """
         if not selected_indices:
-            print("MembersService.edit_member: no row selected")
+            logger.warning("MembersService.edit_member: no row selected")
             return
         row = selected_indices[0]
         if model_getter is not None:
@@ -37,11 +39,11 @@ class MembersService:
                 # If the getter returns a Qt item-like object, attempt to
                 # read a text/value attribute in a best-effort manner.
                 val = getattr(id_item, "text", lambda: id_item)()
-                print(f"MembersService.edit_member: edit id={val}")
+                logger.info("MembersService.edit_member: edit id=%s", val)
             except Exception:
-                print(f"MembersService.edit_member: edit row={row}")
+                logger.info("MembersService.edit_member: edit row=%s", row)
         else:
-            print(f"MembersService.edit_member: edit row={row}")
+            logger.info("MembersService.edit_member: edit row=%s", row)
 
     def delete_members(self, selected_indices: List[int]) -> List[int]:
         """Return a list of row indices to delete, sorted in reverse order.
@@ -50,10 +52,10 @@ class MembersService:
         coupling the service to Qt APIs.
         """
         if not selected_indices:
-            print("MembersService.delete_members: no row selected")
+            logger.warning("MembersService.delete_members: no row selected")
             return []
         rows = sorted(set(selected_indices), reverse=True)
-        print(f"MembersService.delete_members: will remove {len(rows)} rows: {rows}")
+        logger.info("MembersService.delete_members: will remove %d rows: %s", len(rows), rows)
         return rows
 
 
@@ -63,11 +65,11 @@ class MembersService:
         The UI should extract model data into `rows` before calling this.
         """
         count = len(rows) if rows is not None else 0
-        print(f"MembersService.export_members(): placeholder exporting {count} rows to {destination}")
+        logger.info("MembersService.export_members(): placeholder exporting %d rows to %s", count, destination)
 
     def register_transactions(self, selected_indices: List[int]) -> None:
         """Handle transaction registration for given selected indices."""
         if not selected_indices:
-            print("MembersService.register_transactions: no member selected - opening general register")
+            logger.info("MembersService.register_transactions: no member selected - opening general register")
             return
-        print(f"MembersService.register_transactions: selected rows={selected_indices}")
+        logger.info("MembersService.register_transactions: selected rows=%s", selected_indices)

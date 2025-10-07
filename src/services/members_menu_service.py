@@ -10,6 +10,8 @@ from __future__ import annotations
 from typing import Any, List, Optional
 
 from services.view_registry import ViewRegistry
+from utils.logger import get_logger
+logger = get_logger(__name__)
 
 
 class MembersMenuService:
@@ -30,7 +32,7 @@ class MembersMenuService:
         Returns number of rows added.
         """
         if model is None:
-            print("MembersMenuService.search_members: no model provided")
+            logger.warning("MembersMenuService.search_members: no model provided")
             return 0
 
         try:
@@ -55,11 +57,11 @@ class MembersMenuService:
             if limit is None or limit > 0:
                 row = [QStandardItem("1"), QStandardItem(text), QStandardItem("n/a@example.com"), QStandardItem("Activo")]
                 model.appendRow(row)
-                print(f"MembersMenuService.search_members: added 1 row for '{text}' (limit: {limit})")
+                logger.info("MembersMenuService.search_members: added 1 row for '%s' (limit: %s)", text, limit)
                 return 1
             return 0
         except Exception as exc:
-            print("MembersMenuService.search_members: failed -", exc)
+            logger.exception("MembersMenuService.search_members: failed - %s", exc)
             return 0
 
     def __init__(self) -> None:
@@ -81,7 +83,7 @@ class MembersMenuService:
             limit: Optional limit on number of rows. If None, fetches all rows.
         """
         if model is None:
-            print("MembersMenuService.fetch_view: no model provided")
+            logger.warning("MembersMenuService.fetch_view: no model provided")
             return 0
         try:
             keys, rows = self._view_registry.fetch_view(name, limit=limit)
@@ -96,7 +98,7 @@ class MembersMenuService:
                 model.appendRow(items)
             return len(rows)
         except Exception as exc:
-            print("MembersMenuService.fetch_view: failed -", exc)
+            logger.exception("MembersMenuService.fetch_view: failed - %s", exc)
             return 0
 
     def fetch_table(self, table_name: str, model: Any, limit: Optional[int] = None) -> int:

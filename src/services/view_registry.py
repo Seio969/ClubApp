@@ -12,6 +12,8 @@ from typing import Any, Iterable, List, Optional, Tuple
 from database.session import engine
 from sqlalchemy import text
 from sqlalchemy import inspect as sqlalchemy_inspect
+from utils.logger import get_logger
+logger = get_logger(__name__)
 
 
 class ViewRegistry:
@@ -36,7 +38,7 @@ class ViewRegistry:
             inspector = sqlalchemy_inspect(engine)
             return inspector.get_table_names()
         except Exception as exc:
-            print("ViewRegistry.get_db_tables: failed -", exc)
+            logger.exception("ViewRegistry.get_db_tables: failed - %s", exc)
             return []
 
     def register_table_view(self, name: str, description: Optional[str] = None) -> None:
@@ -83,7 +85,7 @@ class ViewRegistry:
                     keys = list(res.keys())
             return keys, rows
         except Exception as exc:
-            print("ViewRegistry.fetch_table: failed -", exc)
+            logger.exception("ViewRegistry.fetch_table: failed - %s", exc)
             return [], []
 
     def fetch_view(self, name: str, limit: Optional[int] = None) -> Tuple[List[str], List[tuple]]:
@@ -99,7 +101,7 @@ class ViewRegistry:
             # fallback: if name matches a db table, fetch it
             if name in self.get_db_tables():
                 return self.fetch_table(name, limit=limit)
-            print(f"ViewRegistry.fetch_view: unknown view '{name}'")
+            logger.warning("ViewRegistry.fetch_view: unknown view '%s'", name)
             return [], []
 
         entry = self._views[name]
@@ -145,5 +147,5 @@ class ViewRegistry:
                 return list(keys), list(rows)
 
         except Exception as exc:
-            print("ViewRegistry.fetch_view: failed -", exc)
+            logger.exception("ViewRegistry.fetch_view: failed - %s", exc)
             return [], []
