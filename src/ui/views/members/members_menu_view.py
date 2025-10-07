@@ -231,17 +231,32 @@ class MembersMenuView(QWidget):
         # Populate views dropdown dynamically from service-registered views
         self._populate_db_views()
 
+        # Try to load a preferred view automatically (if available).
+        # Prefer 'socios' (case-insensitive). Fallback to the first registered view.
+        try:
+            views = self._service.get_views()
+            chosen = None
+            if views:
+                for v in views:
+                    try:
+                        #TODO Add this variable to settings or config to be chosen by the user
+                        if str(v).lower() == "socios":
+                            chosen = v
+                            break
+                    except Exception:
+                        continue
+                if chosen is None:
+                    chosen = views[0]
+                if chosen:
+                    self.load_table_view(chosen)
+        except Exception:
+            pass
+
     # Track the currently loaded view name so the toolbar can request a
     # refresh that reloads the same data from the DB.
     # (already initialized at top of __init__)
-#TODO have a look at above comment
-        # Try to load the first registered view automatically (if any)
-        try:
-            views = self._service.get_views()
-            if views:
-                self.load_table_view(views[0])
-        except Exception:
-            pass
+    #TODO have a look at above comment
+        
 
     # ---------------------- placeholder event handlers -------------------------
     def on_back_to_main_menu(self) -> None:
