@@ -131,8 +131,8 @@ class MembersMenuView(QWidget):
         self.limit_input.setMaximumWidth(80)
         self.limit_input.setMinimumHeight(34)
         self.limit_input.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        # Only allow numbers
-        self.limit_input.setValidator(QIntValidator(1, 99999, self))
+        # Only allow numbers (0 means "no limit")
+        self.limit_input.setValidator(QIntValidator(0, 99999, self))
         # Refresh view when Enter is pressed
         self.limit_input.returnPressed.connect(self.on_limit_changed)
         middle_layout.addWidget(self.limit_input)
@@ -209,7 +209,7 @@ class MembersMenuView(QWidget):
         self.toolbar.set_table_references(self.table, self.model)
         # Backend/service used by the view
         self._service = MembersMenuService()
-    # Populate filters menu based on current model columns
+        # Populate filters menu based on current model columns
         self._populate_filters_menu()
         
         central_layout.addWidget(self.table, 3)
@@ -225,10 +225,10 @@ class MembersMenuView(QWidget):
         # Populate views dropdown dynamically from service-registered views
         self._populate_db_views()
 
-        # Track the currently loaded view name so the toolbar can request a
-        # refresh that reloads the same data from the DB.
-        self._current_view_name: Optional[str] = None
-
+    # Track the currently loaded view name so the toolbar can request a
+    # refresh that reloads the same data from the DB.
+    # (already initialized at top of __init__)
+#TODO have a look at above comment
         # Try to load the first registered view automatically (if any)
         try:
             views = self._service.get_views()
@@ -278,20 +278,25 @@ class MembersMenuView(QWidget):
             action.toggled.connect(lambda checked, idx=col: self.table.setColumnHidden(idx, not checked))
             self.filters_menu.addAction(action)
 
-    def get_limit(self) -> int:
+    def get_limit(self) -> Optional[int]:
         """Get the limit value from the limit input field.
-        
+
         Returns:
-            int: The limit value, defaults to 100 if invalid or empty.
+            Optional[int]: The limit value. If the user enters 0 or leaves
+            the field empty/invalid, returns None which means "no limit".
         """
         try:
             text = self.limit_input.text().strip()
             if not text:
-                return 100  # Default limit
+                return None  # Empty means no limit
             limit = int(text)
-            return max(1, min(limit, 99999))  # Ensure within valid range
+            # 0 is treated as "no limit" per UI convention
+            if limit == 0:
+                return None
+            # Ensure within valid positive range
+            return max(1, min(limit, 99999))
         except (ValueError, AttributeError):
-            return 100  # Default limit on error
+            return None  # Treat parse errors as "no limit"
 
     def on_search(self) -> None:
         """Perform a simple search using the text in the top bar input.
@@ -312,7 +317,7 @@ class MembersMenuView(QWidget):
         This will refresh the current view with the new limit.
         """
         limit = self.get_limit()
-        print(f"Límite cambiado a: {limit}")
+        print(f"Límite cambiado a: {limit if limit is not None else 'sin límite'}")
         
         # If we have a current view loaded, refresh it with the new limit
         if hasattr(self, '_current_view_name') and self._current_view_name:
