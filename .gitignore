@@ -8,4 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
-data/
+ 
+# Data directory (database and runtime files)
+/data/
