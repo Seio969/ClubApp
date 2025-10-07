@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction, QIntValidator
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt
 import unicodedata
 
 from .members_toolbar import MembersToolBar
@@ -201,7 +201,6 @@ class MembersMenuView(QWidget):
 
         # Minimal model. Real app should replace with a proper model connected to DB.
         self.model = QStandardItemModel(0, 4, self)
-        self.model.setHorizontalHeaderLabels(["ID", "Nombre", "Email", "Estado"])
         self.table.setModel(self.model)
         header = self.table.horizontalHeader()
         # Allow the user to resize columns interactively instead of forcing
@@ -529,14 +528,8 @@ class MembersMenuView(QWidget):
             rows.sort(key=lambda rv: self._make_sort_key(rv[col]), reverse=not ascending)
 
             # Repopulate model preserving header labels
-            from PySide6.QtGui import QStandardItem
-
             # Capture headers
-            try:
-                from PySide6.QtCore import Qt as _Qt
-                headers = [self.model.headerData(c, _Qt.Orientation.Horizontal) for c in range(col_count)]
-            except Exception:
-                headers = [self.model.headerData(c, Qt.Orientation.Horizontal) for c in range(col_count)]
+            headers = [self.model.headerData(c, Qt.Orientation.Horizontal) for c in range(col_count)]
 
             # Clear and rebuild
             self.model.removeRows(0, self.model.rowCount())
