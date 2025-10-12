@@ -2,10 +2,10 @@
 
 Layout requested:
 - Top: a horizontal "roll" that will hold buttons for future table/views.
-- Below the top bar, left: the query results (table view).
-- Below the top bar, right: a vertical menu with buttons: Buscar (uses the top bar search input), Filtros, Anadir miembro.
+- Below the top bar: the query results (table view) occupying the main area.
 
 This file provides a ready-to-use QWidget that can be added to the main window stack.
+The right-side vertical action menu was removed per UI simplification.
 """
 
 from __future__ import annotations
@@ -21,16 +21,22 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QToolButton,
+    QStyle,
     QMenu,
     QSizePolicy,
     QTableView,
     QHeaderView,
     QAbstractItemView,
 )
-from PySide6.QtGui import QStandardItemModel, QStandardItem
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction, QIntValidator
+from PySide6.QtCore import Qt, QEvent
+import unicodedata
+from utils.logger import get_logger
+logger = get_logger(__name__)
 
-
+from .members_toolbar import MembersToolBar
+from ui.styles import MEMBERS_MENU_STYLESHEET
+from services.members_menu_service import MembersMenuService
 class MembersMenuView(QWidget):
     """Members menu view widget.
 
@@ -47,6 +53,7 @@ class MembersMenuView(QWidget):
         super().__init__(parent)
         self.setObjectName("membersMenu")
         self.main_window = parent  # Store reference to main window for navigation
+        self._current_view_name = None  # Track currently loaded view for refreshing
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(8, 8, 8, 8)
@@ -58,58 +65,126 @@ class MembersMenuView(QWidget):
         top_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         top_layout = QHBoxLayout(top_bar)
         top_layout.setContentsMargins(6, 6, 6, 6)
-        # Reduce global spacing so we control the exact gap after the back button.
+        # Reduce global spacing so we control the exact gaps inside groups.
         top_layout.setSpacing(0)
 
-        # Back button to return to main menu
-        back_button = QPushButton("← Volver")
+        # Left group: back button (compact)
+        left_group = QWidget(top_bar)
+        left_group.setObjectName("topLeftGroup")
+        left_layout = QHBoxLayout(left_group)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(8)
+
+        back_button = QPushButton()
         back_button.setObjectName("backButton")
         back_button.setToolTip("Volver al menú principal")
-        back_button.setMaximumWidth(100)
+        back_button.setMaximumWidth(120)
+        back_button.setText("Volver")
+        back_button.setIcon(self.style().standardIcon(QStyle.SP_ArrowBack))
         back_button.clicked.connect(self.on_back_to_main_menu)
-        top_layout.addWidget(back_button, 0, Qt.AlignmentFlag.AlignLeft)
+        left_layout.addWidget(back_button)
 
-        # Small fixed gap of 8 pixels so the search input sits right next to the back button
-        top_layout.addSpacing(8)
+        top_layout.addWidget(left_group, 0, Qt.AlignmentFlag.AlignLeft)
 
-        # A small search input on the top bar (the right-side Buscar button will use this)
-        self.search_input = QLineEdit(top_bar)
-        self.search_input.setPlaceholderText("Buscar...")
+        # Center group: nicer, slightly larger search area
+        center_group = QWidget(top_bar)
+        center_group.setObjectName("topCenterGroup")
+        center_layout = QHBoxLayout(center_group)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(6)
+
+        self.search_input = QLineEdit(center_group)
+        self.search_input.setPlaceholderText("Buscar miembros, email, id...")
         self.search_input.setClearButtonEnabled(True)
-        self.search_input.setMinimumHeight(28)
-        self.search_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.search_input.setMinimumHeight(34)
+        self.search_input.setMinimumWidth(300)
+        self.search_input.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.search_input.returnPressed.connect(self.on_search)
-        top_layout.addWidget(self.search_input, Qt.AlignmentFlag.AlignLeft)
+        center_layout.addWidget(self.search_input)
 
-        # Buscar button - uses the top bar input as requested
         btn_search = QPushButton("Buscar")
         btn_search.setToolTip("Buscar usando el texto del campo superior")
-        btn_search.setMaximumWidth(100)
+        btn_search.setMaximumWidth(110)
+        btn_search.setMinimumHeight(34)
+        btn_search.setIcon(self.style().standardIcon(QStyle.SP_FileDialogContentsView))
         btn_search.clicked.connect(self.on_search)
-        top_layout.addWidget(btn_search)
+        center_layout.addWidget(btn_search)
 
-        # Push the views dropdown to the far right so the left-side controls remain packed.
+        # Use stretches to keep the search area visually centered between left and right groups
+        top_layout.addStretch(1)
+        top_layout.addWidget(center_group, 0, Qt.AlignmentFlag.AlignCenter)
+        
+        # Middle group: limit entry
+        middle_group = QWidget(top_bar)
+        middle_group.setObjectName("topMiddleGroup")
+        middle_layout = QHBoxLayout(middle_group)
+        middle_layout.setContentsMargins(0, 0, 0, 0)
+        middle_layout.setSpacing(6)
+
+        limit_label = QLabel("Límite:")
+        limit_label.setToolTip("Número máximo de resultados a mostrar")
+        middle_layout.addWidget(limit_label)
+
+        self.limit_input = QLineEdit(middle_group)
+        self.limit_input.setPlaceholderText("")
+        self.limit_input.setText("0")  # Default value
+        self.limit_input.setToolTip("Número máximo de resultados a mostrar (por defecto 100)")
+        self.limit_input.setMaximumWidth(80)
+        self.limit_input.setMinimumHeight(34)
+        self.limit_input.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        # Only allow numbers (0 means "no limit")
+        self.limit_input.setValidator(QIntValidator(0, 99999, self))
+        # Refresh view when Enter is pressed
+        self.limit_input.returnPressed.connect(self.on_limit_changed)
+        middle_layout.addWidget(self.limit_input)
+
+        top_layout.addWidget(middle_group, 0, Qt.AlignmentFlag.AlignCenter)
         top_layout.addStretch(1)
 
-        self.views_button = QToolButton(top_bar)
+        # Right group: views menu and (future) actions
+        right_group = QWidget(top_bar)
+        right_group.setObjectName("topRightGroup")
+        right_layout = QHBoxLayout(right_group)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(8)
+
+        self.views_button = QToolButton(right_group)
         self.views_button.setObjectName("viewsButton")
         self.views_button.setText("Vistas")
         self.views_button.setToolTip("Seleccionar vista")
-        # Show the menu instantly when the button is clicked on the arrow
         self.views_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        # Set longer minimum width to accommodate text + arrow
-        self.views_button.setMinimumWidth(180)
-        # Set text on the left, arrow on the right
+        self.views_button.setMinimumWidth(140)
         self.views_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.views_menu = QMenu(self.views_button)
         self.views_button.setMenu(self.views_menu)
-        # Make the button take available horizontal space but keep a fixed height
-        self.views_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        top_layout.addWidget(self.views_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self.views_button.setIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
+        self.views_button.setAutoRaise(True)
+        right_layout.addWidget(self.views_button)
+
+        # Filters dropdown: will contain checkable actions for each column
+        self.filters_button = QToolButton(right_group)
+        self.filters_button.setObjectName("filtersButton")
+        self.filters_button.setText("Filtros")
+        self.filters_button.setToolTip("Mostrar/ocultar columnas")
+        self.filters_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.filters_button.setMinimumWidth(140)
+        self.filters_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.filters_menu = QMenu(self.filters_button)
+        self.filters_button.setMenu(self.filters_menu)
+        self.filters_button.setIcon(self.style().standardIcon(QStyle.SP_DialogYesButton))
+        self.filters_button.setAutoRaise(True)
+        right_layout.addWidget(self.filters_button)
+
+        top_layout.addWidget(right_group, 0, Qt.AlignmentFlag.AlignRight)
 
 
 
         main_layout.addWidget(top_bar)
+
+        # --- Toolbar just below the top bar ----------------------------------
+        # Use the specialized MembersToolBar for member-specific actions
+        self.toolbar = MembersToolBar(self)
+        main_layout.addWidget(self.toolbar)
 
         # --- Central area: left -> results table, right -> action menu -------------
         central = QWidget(self)
@@ -117,7 +192,8 @@ class MembersMenuView(QWidget):
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(12)
 
-        # Left: results table
+        # Left: results table (interactive yet stretchable behaviour added
+        # via ensure_columns_fill helper and a small resize event filter)
         self.table = QTableView(central)
         self.table.setObjectName("resultsTable")
         self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -126,71 +202,139 @@ class MembersMenuView(QWidget):
 
         # Minimal model. Real app should replace with a proper model connected to DB.
         self.model = QStandardItemModel(0, 4, self)
-        self.model.setHorizontalHeaderLabels(["ID", "Nombre", "Email", "Estado"])
         self.table.setModel(self.model)
+
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        # Keep interactive resizing (user can drag). We'll implement a
+        # behavior that expands columns to fill extra space but doesn't
+        # force a fixed stretch mode which would prevent interactive resize.
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setDefaultSectionSize(120)
+        header.setStretchLastSection(False)
+        header.setSectionsMovable(True)
+
+        # Allow clicking headers to trigger sorting behavior
+        header.setSectionsClickable(True)
+        header.setSortIndicatorShown(False)
+        header.sectionClicked.connect(self._on_header_clicked)
+
+        # Track sorting state: None means no sorting active
+        self._sort_column = None
+        self._sort_order = None
+        # Remember last search text so we can restore search results when clearing sort
+        self._last_search_text = None
+        
+        # Set table and model references for the toolbar
+        self.toolbar.set_table_references(self.table, self.model)
+        # Backend/service used by the view
+        self._service = MembersMenuService()
+        # Populate filters menu based on current model columns
+        self._populate_filters_menu()
+        
         central_layout.addWidget(self.table, 3)
         # Ensure the layout uses the desired 3:1 horizontal stretch
         central_layout.setStretch(0, 3)
 
-        # Right: vertical menu with buttons
-        right_menu = QWidget(central)
-        right_menu.setObjectName("rightMenu")
-        # Allow the right menu to expand vertically to match the table height
-        right_menu.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
-        right_layout = QVBoxLayout(right_menu)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(4)
-        # Keep controls aligned to the top; stretch will push the add button down
-        right_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-
-        # Filtros button
-        btn_filters = QPushButton("Filtros")
-        btn_filters.clicked.connect(self.on_filters)
-        right_layout.addWidget(btn_filters)
-
-        # Spacer to push add button to bottom-ish
-        right_layout.addStretch(1)
-
-        # Anadir miembro button
-        btn_add = QPushButton("Añadir miembro")
-        btn_add.clicked.connect(self.on_add_member)
-        right_layout.addWidget(btn_add)
-
-        central_layout.addWidget(right_menu, 1)
-        central_layout.setStretch(1, 1)
-
+        # (Right-side action menu removed.) The table occupies the central area.
+        # Ensure the table stretches to take available horizontal space.
         main_layout.addWidget(central)
 
         # Small, pleasant stylesheet to make layout readable
-        self.setStyleSheet(r"""
-        #membersMenu { background: #fafafa; }
-        #topBar { background: transparent; }
-        #viewsLabel { font-weight: 600; margin-right: 6px; }
-        QPushButton { min-width: 90px; min-height: 28px; }
-        #backButton { 
-            background-color: #f0f0f0; 
-            border: 1px solid #ccc; 
-            border-radius: 4px; 
-            font-weight: bold;
-            color: #333;
-        }
-        #backButton:hover { 
-            background-color: #e0e0e0; 
-            border-color: #999; 
-        }
-        #backButton:pressed { 
-            background-color: #d0d0d0; 
-        }
-        #resultsTable { background: #ffffff; }
-        """)
+        self.setStyleSheet(MEMBERS_MENU_STYLESHEET)
+        # Populate views dropdown dynamically from service-registered views
+        self._populate_db_views()
 
-        # For quick visual testing: populate the views dropdown menu with demo
-        # entries so you can press the arrow and see it expand downward.
-        # This can be removed in production.
-        self._populate_demo_views()
+        # Try to load a preferred view automatically (if available).
+        # Prefer 'socios' (case-insensitive). Fallback to the first registered view.
+        try:
+            views = self._service.get_views()
+            chosen = None
+            if views:
+                for v in views:
+                    try:
+                        #TODO Add this variable to settings or config to be chosen by the user
+                        if str(v).lower() == "socios":
+                            chosen = v
+                            break
+                    except Exception:
+                        continue
+                if chosen is None:
+                    chosen = views[0]
+                if chosen:
+                    self.load_table_view(chosen)
+        except Exception:
+            pass
+
+        # Ensure columns fill available width initially (model may be empty)
+        try:
+            self.ensure_columns_fill()
+        except Exception:
+            pass
+
+        # Install an event filter on the table viewport so we can react to
+        # resize events and re-distribute extra space while keeping the
+        # interactive resize mode enabled.
+        def _viewport_event_filter(obj, ev):
+            if ev.type() == QEvent.Type.Resize:
+                try:
+                    self.ensure_columns_fill()
+                except Exception:
+                    pass
+            return False
+
+        self.table.viewport().installEventFilter(self)
+
+    def eventFilter(self, obj, ev):
+        # Handle viewport resize events
+        if obj is not None and ev.type() == QEvent.Type.Resize and obj is self.table.viewport():
+            try:
+                self.ensure_columns_fill()
+            except Exception:
+                pass
+        return super().eventFilter(obj, ev)
+
+    def ensure_columns_fill(self) -> None:
+        """Ensure visible columns expand to fill available viewport width
+        while preserving interactive user-resize behavior.
+        """
+        header = self.table.horizontalHeader()
+        model = self.model
+        if model is None:
+            return
+        col_count = model.columnCount()
+        if col_count <= 0:
+            return
+
+        avail = self.table.viewport().width()
+        visible_cols = [c for c in range(col_count) if not self.table.isColumnHidden(c)]
+        if not visible_cols:
+            return
+
+        total = sum(header.sectionSize(c) for c in visible_cols)
+        if total >= avail or total == 0:
+            if total == 0:
+                default = header.defaultSectionSize()
+                for c in visible_cols:
+                    header.resizeSection(c, default)
+            return
+
+        extra = avail - total
+        allocated = 0
+        for i, c in enumerate(visible_cols):
+            if i == len(visible_cols) - 1:
+                inc = extra - allocated
+            else:
+                size = header.sectionSize(c)
+                share = size / total if total > 0 else 1.0 / len(visible_cols)
+                inc = int(round(share * extra))
+                allocated += inc
+            header.resizeSection(c, header.sectionSize(c) + inc)
+
+    # Track the currently loaded view name so the toolbar can request a
+    # refresh that reloads the same data from the DB.
+    # (already initialized at top of __init__)
+    #TODO have a look at above comment
+        
 
     # ---------------------- placeholder event handlers -------------------------
     def on_back_to_main_menu(self) -> None:
@@ -198,14 +342,60 @@ class MembersMenuView(QWidget):
         if self.main_window and hasattr(self.main_window, '_stack') and hasattr(self.main_window, '_home'):
             self.main_window._stack.setCurrentWidget(self.main_window._home)
         else:
-            print("No se pudo navegar al menú principal")
+            logger.warning("No se pudo navegar al menú principal")
 
     def on_select_view(self, name: str) -> None:
         """Called when the user clicks one of the view buttons in the top rolling bar.
 
         In a real app this would switch the visible table/model to the selected view.
         """
-        print(f"Seleccionada vista: {name}")
+        logger.info("Seleccionada vista: %s", name)
+        # In a real app switching views would change the model/columns.
+        # For now, repopulate the filters menu so it reflects the active model.
+        self._populate_filters_menu()
+
+    def _populate_filters_menu(self) -> None:
+        """Create checkable actions for each column in the current model.
+
+        By default all columns are visible (checked). Toggling an action
+        will hide/show the corresponding column in the table view.
+        """
+        # Ensure menu exists
+        if not hasattr(self, "filters_menu") or self.filters_menu is None:
+            self.filters_menu = QMenu(self)
+            self.filters_button.setMenu(self.filters_menu)
+
+        self.filters_menu.clear()
+
+        # Use the service to extract header labels and build actions
+        labels = self._service.get_filter_labels(self.model)
+        for col, label in enumerate(labels):
+            action = QAction(label, self.filters_menu)
+            action.setCheckable(True)
+            action.setChecked(not self.table.isColumnHidden(col))
+            action.setData(col)
+            action.toggled.connect(lambda checked, idx=col: self.table.setColumnHidden(idx, not checked))
+            self.filters_menu.addAction(action)
+
+    def get_limit(self) -> Optional[int]:
+        """Get the limit value from the limit input field.
+
+        Returns:
+            Optional[int]: The limit value. If the user enters 0 or leaves
+            the field empty/invalid, returns None which means "no limit".
+        """
+        try:
+            text = self.limit_input.text().strip()
+            if not text:
+                return None  # Empty means no limit
+            limit = int(text)
+            # 0 is treated as "no limit" per UI convention
+            if limit == 0:
+                return None
+            # Ensure within valid positive range
+            return max(1, min(limit, 99999))
+        except (ValueError, AttributeError):
+            return None  # Treat parse errors as "no limit"
 
     def on_search(self) -> None:
         """Perform a simple search using the text in the top bar input.
@@ -214,34 +404,296 @@ class MembersMenuView(QWidget):
         row containing the search text to show data flow.
         """
         text = self.search_input.text().strip()
-        print(f"Buscar: '{text}'")
-        # Replace model contents with a sample row for demonstration
-        self.model.removeRows(0, self.model.rowCount())
-        if text:
-            row = [QStandardItem("1"), QStandardItem(text), QStandardItem("n/a@example.com"), QStandardItem("Activo")]
-            self.model.appendRow(row)
+        limit = self.get_limit()
+        # remember last search so clearing sort can re-run it
+        self._last_search_text = text
+        logger.info("Buscar: '%s' con límite: %s", text, limit)
+        # Delegate search/population to service
+        added = self._service.search_members(text, self.model, limit=limit)
+        logger.info("Search added %d rows", added)
+        # After populating the model, ensure columns fill the available width
+        try:
+            self.ensure_columns_fill()
+        except Exception:
+            pass
 
-    def on_filters(self) -> None:
-        # Placeholder for filter dialog/controls
-        print("Abrir filtros (placeholder)")
-
-    def on_add_member(self) -> None:
-        # Placeholder: real implementation should open the member form
-        print("Añadir miembro (placeholder)")
-
-
-    def _populate_demo_views(self, count: int = 12) -> None:
-        """Add demo actions to the views dropdown menu to demonstrate the
-        downward-expanding menu behaviour.
-
-        Each action will call `on_select_view` with the view name.
+    def on_limit_changed(self) -> None:
+        """Handle when user presses Enter in the limit input field.
+        
+        This will refresh the current view with the new limit.
         """
+        limit = self.get_limit()
+        logger.info("Límite cambiado a: %s", limit if limit is not None else 'sin límite')
+
+        # If we have a current view loaded, refresh it with the new limit
+        if hasattr(self, '_current_view_name') and self._current_view_name:
+            logger.info("Refrescando vista '%s' con nuevo límite", self._current_view_name)
+            try:
+                self.load_table_view(self._current_view_name)
+            except Exception as exc:
+                logger.exception("Error al refrescar vista con nuevo límite: %s", exc)
+            return
+
+        # If no specific view is loaded, try to refresh the table
+        logger.info("Refrescando tabla con nuevo límite")
+        try:
+            self.refresh_table()
+        except Exception as exc:
+            logger.exception("Error al refrescar tabla con nuevo límite: %s", exc)
+
+
+    def _populate_db_views(self) -> None:
+        """Populate the views dropdown with actual database table names."""
         self.views_menu.clear()
-        for i in range(count):
-            name = f"Vista {i+1}"
-            action = self.views_menu.addAction(name)
-            # Connect using a lambda that captures the current name
-            action.triggered.connect(lambda checked=False, n=name: self.on_select_view(n))
+        try:
+            views = self._service.get_views()
+            if not views:
+                # fallback: keep a demo entry so the menu isn't empty
+                action = self.views_menu.addAction("No hay vistas registradas")
+                action.setEnabled(False)
+                return
+
+            for name in views:
+                action = self.views_menu.addAction(name)
+                action.triggered.connect(lambda checked=False, n=name: self.load_table_view(n))
+        except Exception as exc:
+            logger.exception("MembersMenuView._populate_db_views: failed - %s", exc)
+
+    def load_table_view(self, table_name: str) -> None:
+        """Load the named table into the results table by querying the DB.
+
+        This calls the service.fetch_view which validates/dispatches the view
+        (table/sql/callable) and populates the model.
+        """
+        logger.info("Cargando vista: %s", table_name)
+        limit = self.get_limit()
+        logger.info("Aplicando límite: %s", limit)
+
+        # remember which view is currently loaded so refresh can re-run it
+        self._current_view_name = table_name
+        added = self._service.fetch_view(table_name, self.model, limit=limit)
+        logger.info("Cargadas %d filas desde vista '%s' con límite %s", added, table_name, limit)
+
+        # Refresh filters menu to match new columns
+        self._populate_filters_menu()
+
+        # If a sort is currently active, try to re-apply it on the newly loaded model
+        try:
+            self._maybe_reapply_sort()
+        except Exception:
+            # Non-critical; ignore reapply failures
+            logger.debug("_maybe_reapply_sort failed (ignored)")
+        # Ensure columns expand to fill the area after model load
+        try:
+            self.ensure_columns_fill()
+        except Exception:
+            pass
+
+    def refresh_table(self) -> None:
+        """Reload the currently selected/loaded table view.
+
+        This re-invokes the same logic as `load_table_view` for the
+        previously loaded view name. If no view is loaded, try to load
+        the first available view from the service.
+        """
+        if self._current_view_name:
+            try:
+                self.load_table_view(self._current_view_name)
+            except Exception as exc:
+                logger.exception("MembersMenuView.refresh_table: failed - %s", exc)
+            return
+
+        # No current view selected; attempt to load the first registered view
+        try:
+            views = self._service.get_views()
+            if views:
+                self.load_table_view(views[0])
+        except Exception:
+            # nothing to refresh
+            pass
+
+    # Handle tildes and accents in sorting and searching by normalizing
+    # text values to a diacritic-free form and using that for comparisons.
+    # ---------------------- sorting helpers -------------------------
+
+    def _normalize_for_sort(self, value: str) -> str:
+        """Return a lowercase, diacritic-free version of the string for sorting.
+
+        This converts characters like 'á' -> 'a', 'ñ' -> 'n', etc., and
+        performs a casefold to make comparisons case-insensitive.
+        """
+        if value is None:
+            return ""
+        try:
+            # Ensure we are working with a string
+            s = str(value)
+            # Normalize to NFKD and drop combining marks (diacritics)
+            nkfd = unicodedata.normalize("NFKD", s)
+            stripped = "".join(ch for ch in nkfd if not unicodedata.combining(ch))
+            # Use casefold for aggressive case-insensitive compare
+            return stripped.casefold().strip()
+        except Exception:
+            return str(value).casefold() if value is not None else ""
+
+    def _make_sort_key(self, raw: str):
+        """Create a sort key that prefers numeric sorting when values look numeric.
+
+        Returns a tuple where the first element is 0 for numeric values and 1
+        for text values so numbers sort before text when mixed. The second
+        element is the numeric value or the normalized text.
+        """
+        if raw is None:
+            return (1, "")
+        s = str(raw).strip()
+        # Try integer first, then float
+        try:
+            ival = int(s)
+            return (0, ival)
+        except Exception:
+            pass
+        try:
+            fval = float(s)
+            return (0, fval)
+        except Exception:
+            pass
+        # Fallback to normalized text
+        return (1, self._normalize_for_sort(s))
+    def _on_header_clicked(self, index: int) -> None:
+        """Handle clicks on header sections to toggle sort state.
+
+        Cycle: (no sort) -> ASC -> DESC -> (no sort)
+        Clicking a different column restarts the cycle on that column.
+        """
+        try:
+            # Determine next state
+            if self._sort_column is None or self._sort_column != index:
+                # New column selected -> start with ascending
+                self._sort_column = index
+                self._sort_order = Qt.SortOrder.AscendingOrder
+                self._apply_sort()
+                return
+
+            # Same column clicked again -> toggle
+            if self._sort_order == Qt.SortOrder.AscendingOrder:
+                self._sort_order = Qt.SortOrder.DescendingOrder
+                self._apply_sort()
+                return
+
+            if self._sort_order == Qt.SortOrder.DescendingOrder:
+                # Third click: clear sorting and restore original order
+                self._clear_sort()
+                return
+        except Exception as exc:
+            print("Header click sorting failed:", exc)
+
+    def _apply_sort(self) -> None:
+        """Apply the current sort to the model and show indicator."""
+        if self._sort_column is None or self._sort_order is None:
+            return
+        try:
+            col = self._sort_column
+            ascending = self._sort_order == Qt.SortOrder.AscendingOrder
+
+            # Extract all rows as lists of text values
+            rows = []
+            row_count = self.model.rowCount()
+            col_count = self.model.columnCount()
+            for r in range(row_count):
+                vals = []
+                for c in range(col_count):
+                    item = self.model.item(r, c)
+                    vals.append("") if item is None else vals.append(item.text())
+                rows.append(vals)
+
+            # Stable sort using keys that remove diacritics and prefer numeric ordering
+            rows.sort(key=lambda rv: self._make_sort_key(rv[col]), reverse=not ascending)
+
+            # Repopulate model preserving header labels
+            # Capture headers
+            headers = [self.model.headerData(c, Qt.Orientation.Horizontal) for c in range(col_count)]
+
+            # Clear and rebuild
+            self.model.removeRows(0, self.model.rowCount())
+            self.model.setColumnCount(col_count)
+            if headers:
+                self.model.setHorizontalHeaderLabels([str(h) if h is not None else "" for h in headers])
+
+            for vals in rows:
+                items = [QStandardItem("" if v is None else str(v)) for v in vals]
+                self.model.appendRow(items)
+
+            header = self.table.horizontalHeader()
+            header.setSortIndicator(self._sort_column, self._sort_order)
+            header.setSortIndicatorShown(True)
+            # After sorting and repopulating the model, ensure columns fill
+            try:
+                self.ensure_columns_fill()
+            except Exception:
+                pass
+        except Exception as exc:
+            print("Failed to apply sort:", exc)
+
+    def _clear_sort(self) -> None:
+        """Clear any active sort and restore original data order.
+
+        Restoration strategy:
+        - If a DB-backed view is loaded, re-run load_table_view to fetch original order.
+        - Otherwise, re-run the last search (if any) to restore the previous dataset.
+        """
+        try:
+            self._sort_column = None
+            self._sort_order = None
+            header = self.table.horizontalHeader()
+            header.setSortIndicatorShown(False)
+
+            # Restore data depending on current context
+            if getattr(self, "_current_view_name", None):
+                # reload current view from service (original order)
+                try:
+                    self.load_table_view(self._current_view_name)
+                    return
+                except Exception:
+                    pass
+
+            # No current view: if we have a last search text, re-run search
+            if self._last_search_text is not None:
+                try:
+                    # on_search will repopulate model using remembered input
+                    # but ensure the input field still contains the same text
+                    self.search_input.setText(self._last_search_text)
+                    self.on_search()
+                    return
+                except Exception:
+                    pass
+
+            # Fallback: refresh table which may load a default view
+            try:
+                self.refresh_table()
+            except Exception:
+                pass
+        except Exception as exc:
+            print("Failed to clear sort:", exc)
+
+    def _maybe_reapply_sort(self) -> None:
+        """Re-apply active sort after the model has been (re)populated.
+
+        This is used after loading a view so user-visible sorting persists
+        across reloads when appropriate.
+        """
+        if self._sort_column is None or self._sort_order is None:
+            return
+        # Ensure column exists in new model
+        try:
+            col_count = self.model.columnCount()
+            if 0 <= self._sort_column < col_count:
+                self._apply_sort()
+            else:
+                # Invalid for this model: clear sort state and hide indicator
+                self._sort_column = None
+                self._sort_order = None
+                self.table.horizontalHeader().setSortIndicatorShown(False)
+        except Exception:
+            pass
 
 
 
