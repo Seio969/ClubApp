@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Optional, TYPE_CHECKING
 
-from PySide6.QtWidgets import QToolBar, QStyle, QTableView
+from PySide6.QtWidgets import QToolBar, QStyle, QTableView, QMessageBox
 from PySide6.QtCore import QSize
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from PySide6.QtWidgets import QWidget
 
 from services.members_toolbar_service import MembersService
+from .member_dialog import MemberDialog
 from utils.logger import get_logger
 logger = get_logger(__name__)
 
@@ -83,8 +84,25 @@ class MembersToolBar(QToolBar):
         self.model = model
 
     def on_add_member(self) -> None:
-        """Handle add member action."""
-        self.service.add_member()
+        """Open the new-member dialog and persist the result to the DB."""
+        dialog = MemberDialog(self)
+        if dialog.exec() != MemberDialog.DialogCode.Accepted:
+            return
+
+        data = dialog.get_data()
+        new_id = self.service.add_member(data)
+        if new_id is None:
+            QMessageBox.critical(
+                self, "Error", "No se pudo crear el miembro. Revise los datos e inténtelo de nuevo."
+            )
+            return
+
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "refresh_table"):
+            try:
+                parent.refresh_table()
+            except Exception as exc:
+                logger.exception("MembersToolBar.on_add_member: refresh_table failed - %s", exc)
 
     def on_edit_member(self) -> None:
         """Handle edit member action."""
