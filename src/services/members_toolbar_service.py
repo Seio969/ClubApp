@@ -7,7 +7,10 @@ Qt-specific objects and conversions.
 
 from __future__ import annotations
 
-from typing import Callable, List, Optional, Any
+from typing import Callable, Dict, List, Optional, Any
+
+from database.models import Socio
+from database.session import SessionLocal
 from utils.logger import get_logger
 logger = get_logger(__name__)
 
@@ -19,9 +22,30 @@ class MembersService:
     easy to unit test and independent from PySide6.
     """
 
-    def add_member(self, parent: Optional[Any] = None) -> None:
-        """Placeholder for creating a new member."""
-        logger.info("MembersService.add_member(): placeholder")
+    def add_member(self, data: Dict[str, Any]) -> Optional[int]:
+        """Persist a new member (Socio) to the database.
+
+        `data` should contain the Socio field values (see MemberDialog.get_data).
+        Returns the new row's id_socio on success, or None on failure.
+        """
+        session = SessionLocal()
+        try:
+            socio = Socio(**data)
+            session.add(socio)
+            session.commit()
+            session.refresh(socio)
+            logger.info(
+                "MembersService.add_member: created socio id=%s numero_socio=%s",
+                socio.id_socio,
+                socio.numero_socio,
+            )
+            return socio.id_socio
+        except Exception as exc:
+            session.rollback()
+            logger.exception("MembersService.add_member: failed to create member - %s", exc)
+            return None
+        finally:
+            session.close()
 
     def edit_member(self, selected_indices: List[int], model_getter: Optional[Callable[[int, int], Any]] = None) -> None:
         """Prepare an edit operation for the first selected index.
