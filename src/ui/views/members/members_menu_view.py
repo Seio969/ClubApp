@@ -28,16 +28,17 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QAbstractItemView,
 )
-from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction, QIntValidator
+from PySide6.QtGui import QStandardItemModel, QAction, QIntValidator
 from PySide6.QtCore import Qt, QEvent
-import unicodedata
 from utils.logger import get_logger
 logger = get_logger(__name__)
 
 from .members_toolbar import MembersToolBar
+from .column_fill import ensure_columns_fill as _ensure_columns_fill
+from .table_sort import TableSortMixin
 from ui.styles import MEMBERS_MENU_STYLESHEET
 from services.members_menu_service import MembersMenuService
-class MembersMenuView(QWidget):
+class MembersMenuView(QWidget, TableSortMixin):
     """Members menu view widget.
 
     Contract (tiny):
@@ -294,41 +295,8 @@ class MembersMenuView(QWidget):
         return super().eventFilter(obj, ev)
 
     def ensure_columns_fill(self) -> None:
-        """Ensure visible columns expand to fill available viewport width
-        while preserving interactive user-resize behavior.
-        """
-        header = self.table.horizontalHeader()
-        model = self.model
-        if model is None:
-            return
-        col_count = model.columnCount()
-        if col_count <= 0:
-            return
-
-        avail = self.table.viewport().width()
-        visible_cols = [c for c in range(col_count) if not self.table.isColumnHidden(c)]
-        if not visible_cols:
-            return
-
-        total = sum(header.sectionSize(c) for c in visible_cols)
-        if total >= avail or total == 0:
-            if total == 0:
-                default = header.defaultSectionSize()
-                for c in visible_cols:
-                    header.resizeSection(c, default)
-            return
-
-        extra = avail - total
-        allocated = 0
-        for i, c in enumerate(visible_cols):
-            if i == len(visible_cols) - 1:
-                inc = extra - allocated
-            else:
-                size = header.sectionSize(c)
-                share = size / total if total > 0 else 1.0 / len(visible_cols)
-                inc = int(round(share * extra))
-                allocated += inc
-            header.resizeSection(c, header.sectionSize(c) + inc)
+        """Expand visible columns to fill available viewport width."""
+        _ensure_columns_fill(self.table, self.model)
 
     # Track the currently loaded view name so the toolbar can request a
     # refresh that reloads the same data from the DB.
@@ -512,189 +480,9 @@ class MembersMenuView(QWidget):
             # nothing to refresh
             pass
 
-    # Handle tildes and accents in sorting and searching by normalizing
-    # text values to a diacritic-free form and using that for comparisons.
-    # ---------------------- sorting helpers -------------------------
-
-    def _normalize_for_sort(self, value: str) -> str:
-        """Return a lowercase, diacritic-free version of the string for sorting.
-
-        This converts characters like 'á' -> 'a', 'ñ' -> 'n', etc., and
-        performs a casefold to make comparisons case-insensitive.
-        """
-        if value is None:
-            return ""
-        try:
-            # Ensure we are working with a string
-            s = str(value)
-            # Normalize to NFKD and drop combining marks (diacritics)
-            nkfd = unicodedata.normalize("NFKD", s)
-            stripped = "".join(ch for ch in nkfd if not unicodedata.combining(ch))
-            # Use casefold for aggressive case-insensitive compare
-            return stripped.casefold().strip()
-        except Exception:
-            return str(value).casefold() if value is not None else ""
-
-    def _make_sort_key(self, raw: str):
-        """Create a sort key that prefers numeric sorting when values look numeric.
-
-        Returns a tuple where the first element is 0 for numeric values and 1
-        for text values so numbers sort before text when mixed. The second
-        element is the numeric value or the normalized text.
-        """
-        if raw is None:
-            return (1, "")
-        s = str(raw).strip()
-        # Try integer first, then float
-        try:
-            ival = int(s)
-            return (0, ival)
-        except Exception:
-            pass
-        try:
-            fval = float(s)
-            return (0, fval)
-        except Exception:
-            pass
-        # Fallback to normalized text
-        return (1, self._normalize_for_sort(s))
-    def _on_header_clicked(self, index: int) -> None:
-        """Handle clicks on header sections to toggle sort state.
-
-        Cycle: (no sort) -> ASC -> DESC -> (no sort)
-        Clicking a different column restarts the cycle on that column.
-        """
-        try:
-            # Determine next state
-            if self._sort_column is None or self._sort_column != index:
-                # New column selected -> start with ascending
-                self._sort_column = index
-                self._sort_order = Qt.SortOrder.AscendingOrder
-                self._apply_sort()
-                return
-
-            # Same column clicked again -> toggle
-            if self._sort_order == Qt.SortOrder.AscendingOrder:
-                self._sort_order = Qt.SortOrder.DescendingOrder
-                self._apply_sort()
-                return
-
-            if self._sort_order == Qt.SortOrder.DescendingOrder:
-                # Third click: clear sorting and restore original order
-                self._clear_sort()
-                return
-        except Exception as exc:
-            print("Header click sorting failed:", exc)
-
-    def _apply_sort(self) -> None:
-        """Apply the current sort to the model and show indicator."""
-        if self._sort_column is None or self._sort_order is None:
-            return
-        try:
-            col = self._sort_column
-            ascending = self._sort_order == Qt.SortOrder.AscendingOrder
-
-            # Extract all rows as lists of text values
-            rows = []
-            row_count = self.model.rowCount()
-            col_count = self.model.columnCount()
-            for r in range(row_count):
-                vals = []
-                for c in range(col_count):
-                    item = self.model.item(r, c)
-                    vals.append("") if item is None else vals.append(item.text())
-                rows.append(vals)
-
-            # Stable sort using keys that remove diacritics and prefer numeric ordering
-            rows.sort(key=lambda rv: self._make_sort_key(rv[col]), reverse=not ascending)
-
-            # Repopulate model preserving header labels
-            # Capture headers
-            headers = [self.model.headerData(c, Qt.Orientation.Horizontal) for c in range(col_count)]
-
-            # Clear and rebuild
-            self.model.removeRows(0, self.model.rowCount())
-            self.model.setColumnCount(col_count)
-            if headers:
-                self.model.setHorizontalHeaderLabels([str(h) if h is not None else "" for h in headers])
-
-            for vals in rows:
-                items = [QStandardItem("" if v is None else str(v)) for v in vals]
-                self.model.appendRow(items)
-
-            header = self.table.horizontalHeader()
-            header.setSortIndicator(self._sort_column, self._sort_order)
-            header.setSortIndicatorShown(True)
-            # After sorting and repopulating the model, ensure columns fill
-            try:
-                self.ensure_columns_fill()
-            except Exception:
-                pass
-        except Exception as exc:
-            print("Failed to apply sort:", exc)
-
-    def _clear_sort(self) -> None:
-        """Clear any active sort and restore original data order.
-
-        Restoration strategy:
-        - If a DB-backed view is loaded, re-run load_table_view to fetch original order.
-        - Otherwise, re-run the last search (if any) to restore the previous dataset.
-        """
-        try:
-            self._sort_column = None
-            self._sort_order = None
-            header = self.table.horizontalHeader()
-            header.setSortIndicatorShown(False)
-
-            # Restore data depending on current context
-            if getattr(self, "_current_view_name", None):
-                # reload current view from service (original order)
-                try:
-                    self.load_table_view(self._current_view_name)
-                    return
-                except Exception:
-                    pass
-
-            # No current view: if we have a last search text, re-run search
-            if self._last_search_text is not None:
-                try:
-                    # on_search will repopulate model using remembered input
-                    # but ensure the input field still contains the same text
-                    self.search_input.setText(self._last_search_text)
-                    self.on_search()
-                    return
-                except Exception:
-                    pass
-
-            # Fallback: refresh table which may load a default view
-            try:
-                self.refresh_table()
-            except Exception:
-                pass
-        except Exception as exc:
-            print("Failed to clear sort:", exc)
-
-    def _maybe_reapply_sort(self) -> None:
-        """Re-apply active sort after the model has been (re)populated.
-
-        This is used after loading a view so user-visible sorting persists
-        across reloads when appropriate.
-        """
-        if self._sort_column is None or self._sort_order is None:
-            return
-        # Ensure column exists in new model
-        try:
-            col_count = self.model.columnCount()
-            if 0 <= self._sort_column < col_count:
-                self._apply_sort()
-            else:
-                # Invalid for this model: clear sort state and hide indicator
-                self._sort_column = None
-                self._sort_order = None
-                self.table.horizontalHeader().setSortIndicatorShown(False)
-        except Exception:
-            pass
-
+    # Sorting behaviour (header-click cycle, diacritic-aware compare) lives in
+    # TableSortMixin (see table_sort.py) — this class only owns the sort state
+    # (_sort_column/_sort_order, initialized above) and the widgets it acts on.
 
 
 def show_members_view(main_window) -> None:
