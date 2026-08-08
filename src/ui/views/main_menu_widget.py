@@ -53,17 +53,24 @@ class MainMenuWidget(QWidget):
 		layoutButtons = QGridLayout()
 		layout.addLayout(layoutButtons, 1)
 
+		# Each entry is (route_id, label, handler) - route_id feeds the
+		# button's objectName (useful for tests/future styling) and handler
+		# is connected directly, rather than dispatching on an emoji prefix
+		# parsed out of the label (the old approach - brittle already, and
+		# wouldn't scale to more buttons; flagged in UI_PROPOSAL.md finding
+		# #5 and fixed here rather than extended further).
 		buttons_main_menu = [
-			"🧑‍🤝‍🧑 Gestionar Miembros",
-			"🧾 Transacciones",
-			"⚙️ Ajustes",
+			("miembros", "🧑‍🤝‍🧑 Gestionar Miembros", show_members_view),
+			("transacciones", "🧾 Transacciones", show_transactions_view),
+			("ajustes", "⚙️ Ajustes", show_settings_view),
 		]
 
 		columns = 2
 		row = 0
 		col = 0
-		for idx, button in enumerate(buttons_main_menu):
-			btn = QPushButton(button)
+		for route_id, label, handler in buttons_main_menu:
+			btn = QPushButton(label)
+			btn.setObjectName(f"menuButton_{route_id}")
 			btn.setEnabled(True)
 			btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 			btn.setStyleSheet(BUTTON_FONT_STYLE)
@@ -77,14 +84,7 @@ class MainMenuWidget(QWidget):
 				col = 0
 				row += 1
 
-			if button.startswith("🧑‍🤝‍🧑"):
-				btn.clicked.connect(lambda _checked=False, mw=self.main_window: show_members_view(mw))
-
-			if button.startswith("🧾"):
-				btn.clicked.connect(lambda _checked=False, mw=self.main_window: show_transactions_view(mw))
-
-			if button.startswith("⚙️"):
-				btn.clicked.connect(lambda _checked=False, mw=self.main_window: show_settings_view(mw))
+			btn.clicked.connect(lambda _checked=False, mw=self.main_window, h=handler: h(mw))
 
 		layout.addSpacing(220)
 
