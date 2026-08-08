@@ -33,11 +33,11 @@ from PySide6.QtCore import Qt, QEvent
 from utils.logger import get_logger
 logger = get_logger(__name__)
 
-from .members_toolbar import MembersToolBar
+from .toolbar import MembersToolBar
 from .column_fill import ensure_columns_fill as _ensure_columns_fill
 from .table_sort import TableSortMixin
 from ui.styles import MEMBERS_MENU_STYLESHEET
-from services.members_menu_service import MembersMenuService
+from .menu_service import MembersMenuService
 class MembersMenuView(QWidget, TableSortMixin):
     """Members menu view widget.
 

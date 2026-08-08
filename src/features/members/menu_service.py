@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, List, Optional
 
-from services.view_registry import ViewRegistry
+from common.view_registry import ViewRegistry
 from utils.logger import get_logger
 logger = get_logger(__name__)
 
