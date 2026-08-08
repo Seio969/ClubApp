@@ -89,12 +89,18 @@ class ReglasCobroToolBar(QToolBar):
         self._refresh_parent()
 
     def on_edit_regla(self) -> None:
-        if self.model is None:
+        if self.model is None or self.table is None:
             return
-        row = self._selected_row()
-        if row is None:
+        sel = self.table.selectionModel().selectedRows()
+        if not sel:
             QMessageBox.information(self, "Editar regla", "Seleccione una regla de cobro para editar.")
             return
+        if len(sel) > 1:
+            QMessageBox.information(
+                self, "Editar regla", "Seleccione una única regla de cobro para editar."
+            )
+            return
+        row = sel[0].row()
 
         id_item = self.model.item(row, COL_ID)
         try:
