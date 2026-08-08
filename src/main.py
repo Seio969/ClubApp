@@ -1,9 +1,9 @@
 
-from pathlib import Path
+from config import DATA_DIR
 from database.init_db import init_db
 from ui.main_window import run_main_window
 
-DB_PATH = Path("data/club_manager.db")
+DB_PATH = DATA_DIR / "club_manager.db"
 
 if not DB_PATH.exists():
     init_db()
