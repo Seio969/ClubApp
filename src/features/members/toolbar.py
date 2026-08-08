@@ -136,9 +136,9 @@ class MembersToolBar(QToolBar):
 
     def on_refresh(self) -> None:
         """Handle refresh action."""
-    # If the parent view provides a refresh_table method prefer that so
-    # the UI reloads the actual DB-backed view. If not available, do
-    # nothing (avoid inserting demo/sample rows).
+        # If the parent view provides a refresh_table method prefer that so
+        # the UI reloads the actual DB-backed view. If not available, do
+        # nothing (avoid inserting demo/sample rows).
         parent = self.parent()
         if parent is not None and hasattr(parent, "refresh_table"):
             try:
@@ -151,7 +151,7 @@ class MembersToolBar(QToolBar):
         # sample-data helper; that behaviour populated demo rows which is
         # undesirable. Keep this a no-op and let callers provide a proper
         # refresh_table implementation on the parent view.
-    logger.info("MembersToolBar.on_refresh: no parent.refresh_table available - nothing to refresh")
+        logger.info("MembersToolBar.on_refresh: no parent.refresh_table available - nothing to refresh")
 
     def on_export(self) -> None:
         """Handle export action."""
