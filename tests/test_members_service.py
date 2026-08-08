@@ -74,3 +74,54 @@ class TestAddMember:
         with Session(test_engine) as session:
             rows = session.query(Socio).filter_by(numero_socio="1001").all()
             assert {row.nombre for row in rows} == {"Marta", "Jose"}
+
+
+class TestGetMember:
+    def test_returns_editable_fields_for_existing_member(self, test_engine):
+        service = MembersService()
+        new_id = service.add_member(_valid_socio_data())
+
+        data = service.get_member(new_id)
+
+        assert data == _valid_socio_data()
+
+    def test_returns_none_for_unknown_id(self, test_engine):
+        service = MembersService()
+
+        assert service.get_member(999) is None
+
+
+class TestUpdateMember:
+    def test_persists_changes(self, test_engine):
+        service = MembersService()
+        new_id = service.add_member(_valid_socio_data())
+
+        ok = service.update_member(new_id, _valid_socio_data(nombre="Marta Actualizada", telefono="600000000"))
+
+        assert ok is True
+        with Session(test_engine) as session:
+            socio = session.get(Socio, new_id)
+            assert socio.nombre == "Marta Actualizada"
+            assert socio.telefono == "600000000"
+            # Untouched fields from the same full-form submission stay as given
+            assert socio.numero_socio == "1001"
+
+    def test_returns_false_for_unknown_id(self, test_engine):
+        service = MembersService()
+
+        ok = service.update_member(999, _valid_socio_data())
+
+        assert ok is False
+
+    def test_returns_false_and_leaves_data_unchanged_on_constraint_violation(self, test_engine):
+        service = MembersService()
+        new_id = service.add_member(_valid_socio_data())
+        data = _valid_socio_data()
+        data["nombre"] = None  # Socio.nombre is NOT NULL
+
+        ok = service.update_member(new_id, data)
+
+        assert ok is False
+        with Session(test_engine) as session:
+            socio = session.get(Socio, new_id)
+            assert socio.nombre == "Marta"

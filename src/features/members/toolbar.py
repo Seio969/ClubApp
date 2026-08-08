@@ -105,21 +105,45 @@ class MembersToolBar(QToolBar):
                 logger.exception("MembersToolBar.on_add_member: refresh_table failed - %s", exc)
 
     def on_edit_member(self) -> None:
-        """Handle edit member action."""
-        # Extract selected indices from the table selection model
-        if self.table is None:
-            self.service.edit_member([])
+        """Open the edit-member dialog pre-filled with the selected member's data."""
+        if self.table is None or self.model is None:
             return
         sel = self.table.selectionModel().selectedRows()
-        indices = [s.row() for s in sel] if sel else []
+        if not sel:
+            QMessageBox.information(self, "Editar miembro", "Seleccione un miembro para editar.")
+            return
 
-        # Provide a model_getter callable that returns the model.item(row, col)
-        def model_getter(row: int, col: int):
-            if self.model is None:
-                return None
-            return self.model.item(row, col)
+        row = sel[0].row()
+        id_item = self.model.item(row, 0)
+        try:
+            id_socio = int(id_item.text()) if id_item is not None else None
+        except (ValueError, AttributeError):
+            id_socio = None
+        if id_socio is None:
+            logger.warning("MembersToolBar.on_edit_member: could not resolve id_socio for row=%s", row)
+            return
 
-        self.service.edit_member(indices, model_getter)
+        data = self.service.get_member(id_socio)
+        if data is None:
+            QMessageBox.critical(self, "Error", "No se pudo cargar el miembro seleccionado.")
+            return
+
+        dialog = MemberDialog(self, initial_data=data)
+        if dialog.exec() != MemberDialog.DialogCode.Accepted:
+            return
+
+        if not self.service.update_member(id_socio, dialog.get_data()):
+            QMessageBox.critical(
+                self, "Error", "No se pudo actualizar el miembro. Revise los datos e inténtelo de nuevo."
+            )
+            return
+
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "refresh_table"):
+            try:
+                parent.refresh_table()
+            except Exception as exc:
+                logger.exception("MembersToolBar.on_edit_member: refresh_table failed - %s", exc)
 
     def on_delete_member(self) -> None:
         """Handle delete member action (deactivates the member, never a physical delete)."""
