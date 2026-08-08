@@ -23,18 +23,98 @@ class MembersService:
     easy to unit test and independent from PySide6.
     """
 
+    def get_titular(self, numero_socio: str) -> Optional[Dict[str, Any]]:
+        """Return the current titular (primary holder) for numero_socio.
+
+        Returns a plain dict with id_socio/numero_socio/nombre/apellidos, or
+        None if numero_socio has no titular set (either it doesn't exist yet
+        or it's one of the pre-existing groups left unset - see PLAN.md 2.17).
+        """
+        try:
+            with get_session() as session:
+                socio = (
+                    session.query(Socio)
+                    .filter(Socio.numero_socio == numero_socio, Socio.es_titular.is_(True))
+                    .first()
+                )
+                if socio is None:
+                    return None
+                return {
+                    "id_socio": socio.id_socio,
+                    "numero_socio": socio.numero_socio,
+                    "nombre": socio.nombre,
+                    "apellidos": socio.apellidos,
+                }
+        except Exception as exc:
+            logger.exception("MembersService.get_titular: failed for numero_socio=%s - %s", numero_socio, exc)
+            return None
+
+    @staticmethod
+    def _unset_other_titulares(session, numero_socio: str, exclude_id_socio: int) -> Optional[Socio]:
+        """Unset es_titular on any other Socio sharing numero_socio.
+
+        Returns the Socio row that was the titular before being unset (for
+        audit-log attribution), or None if there wasn't one. Doesn't commit -
+        caller runs this inside its own get_session() block.
+        """
+        others = (
+            session.query(Socio)
+            .filter(
+                Socio.numero_socio == numero_socio,
+                Socio.es_titular.is_(True),
+                Socio.id_socio != exclude_id_socio,
+            )
+            .all()
+        )
+        previous = others[0] if others else None
+        for other in others:
+            other.es_titular = False
+        return previous
+
     def add_member(self, data: Dict[str, Any]) -> Optional[int]:
         """Persist a new member (Socio) to the database.
 
         `data` should contain the Socio field values (see MemberDialog.get_data).
         Returns the new row's id_socio on success, or None on failure.
+
+        Titular handling (PLAN.md 2.17): a brand-new numero_socio always gets
+        its first Socio row marked es_titular=True, overriding whatever the
+        form sent - there's no valid "unset" state for a new número. For an
+        existing numero_socio, if the new row is created as titular, any
+        other titular sharing that número is auto-unset (with its own
+        "cambio_titular" log row) - never two titulares at once.
         """
+        data = dict(data)
         try:
             with get_session() as session:
+                numero_socio = data.get("numero_socio")
+                is_new_numero = (
+                    session.query(Socio).filter(Socio.numero_socio == numero_socio).first() is None
+                )
+                if is_new_numero:
+                    data["es_titular"] = True
+
                 socio = Socio(**data)
                 session.add(socio)
                 session.flush()  # populate id_socio before the session closes
                 new_id = socio.id_socio
+
+                if socio.es_titular:
+                    previous = self._unset_other_titulares(session, numero_socio, exclude_id_socio=new_id)
+                    if previous is not None:
+                        record_log(
+                            session,
+                            id_socio=new_id,
+                            accion="cambio_titular",
+                            tabla_afectada="socios",
+                            id_registro_afectado=new_id,
+                            descripcion_cambio=(
+                                f"Titular de numero_socio={numero_socio} cambiado de "
+                                f"{previous.nombre} {previous.apellidos} (id_socio={previous.id_socio}) "
+                                f"a {socio.nombre} {socio.apellidos} (id_socio={new_id})"
+                            ),
+                        )
+
                 record_log(
                     session,
                     id_socio=new_id,
@@ -78,6 +158,7 @@ class MembersService:
                     "fecha_alta": socio.fecha_alta,
                     "estado": socio.estado,
                     "observaciones": socio.observaciones,
+                    "es_titular": bool(socio.es_titular),
                 }
         except Exception as exc:
             logger.exception("MembersService.get_member: failed to fetch id_socio=%s - %s", id_socio, exc)
@@ -101,6 +182,8 @@ class MembersService:
                     for key, value in data.items()
                     if getattr(socio, key) != value
                 ]
+                numero_socio = data.get("numero_socio", socio.numero_socio)
+                becoming_titular = bool(data.get("es_titular")) and not socio.es_titular
                 for key, value in data.items():
                     setattr(socio, key, value)
                 record_log(
@@ -111,6 +194,21 @@ class MembersService:
                     id_registro_afectado=id_socio,
                     descripcion_cambio="; ".join(changes) if changes else "sin cambios en los campos",
                 )
+                if becoming_titular:
+                    previous = self._unset_other_titulares(session, numero_socio, exclude_id_socio=id_socio)
+                    if previous is not None:
+                        record_log(
+                            session,
+                            id_socio=id_socio,
+                            accion="cambio_titular",
+                            tabla_afectada="socios",
+                            id_registro_afectado=id_socio,
+                            descripcion_cambio=(
+                                f"Titular de numero_socio={numero_socio} cambiado de "
+                                f"{previous.nombre} {previous.apellidos} (id_socio={previous.id_socio}) "
+                                f"a {socio.nombre} {socio.apellidos} (id_socio={id_socio})"
+                            ),
+                        )
             logger.info("MembersService.update_member: updated socio id_socio=%s", id_socio)
             return True
         except Exception as exc:

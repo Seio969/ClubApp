@@ -109,7 +109,9 @@ class TestGetMember:
 
         data = service.get_member(new_id)
 
-        assert data == _valid_socio_data()
+        # The first Socio for a brand-new numero_socio is always forced to
+        # es_titular=True (PLAN.md 2.17) - there's no valid "unset" state.
+        assert data == {**_valid_socio_data(), "es_titular": True}
 
     def test_returns_none_for_unknown_id(self, test_engine):
         service = MembersService()

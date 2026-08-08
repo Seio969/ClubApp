@@ -98,6 +98,8 @@ class MembersToolBar(QToolBar):
             return
 
         data = dialog.get_data()
+        if not self._confirm_titular_swap(data.get("numero_socio"), data.get("es_titular"), exclude_id_socio=None):
+            return
         new_id = self.service.add_member(data)
         if new_id is None:
             QMessageBox.critical(
@@ -145,7 +147,10 @@ class MembersToolBar(QToolBar):
         if dialog.exec() != MemberDialog.DialogCode.Accepted:
             return
 
-        if not self.service.update_member(id_socio, dialog.get_data()):
+        new_data = dialog.get_data()
+        if not self._confirm_titular_swap(new_data.get("numero_socio"), new_data.get("es_titular"), exclude_id_socio=id_socio):
+            return
+        if not self.service.update_member(id_socio, new_data):
             QMessageBox.critical(
                 self, "Error", "No se pudo actualizar el miembro. Revise los datos e inténtelo de nuevo."
             )
@@ -220,6 +225,33 @@ class MembersToolBar(QToolBar):
         )
         return reply == QMessageBox.StandardButton.Yes
 
+    def _confirm_titular_swap(
+        self, numero_socio: Optional[str], wants_titular: bool, exclude_id_socio: Optional[int]
+    ) -> bool:
+        """Warn and ask for confirmation before a save would replace an
+        existing titular for numero_socio with a different one (PLAN.md
+        2.17). Returns True if the save should proceed - no existing
+        titular, the existing titular *is* the row being saved, or the
+        user confirmed the swap - False if the user declined.
+        """
+        if not wants_titular or not numero_socio:
+            return True
+        previous = self.service.get_titular(numero_socio)
+        if previous is None:
+            return True
+        if exclude_id_socio is not None and previous.get("id_socio") == exclude_id_socio:
+            return True
+        nombre_previo = f"{previous.get('nombre', '')} {previous.get('apellidos', '')}".strip()
+        reply = QMessageBox.question(
+            self,
+            "Confirmar cambio de titular",
+            f"¿Reemplazar a {nombre_previo or 'el titular actual'} como titular del número "
+            f"{numero_socio}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return reply == QMessageBox.StandardButton.Yes
+
     def on_refresh(self) -> None:
         """Handle refresh action."""
         # If the parent view provides a refresh_table method prefer that so
@@ -279,6 +311,14 @@ class MembersToolBar(QToolBar):
                 preset_socio = self._resolve_preset_socio(row)
                 if preset_socio is None:
                     QMessageBox.critical(self, "Error", "No se pudo resolver el socio seleccionado.")
+                    return
+                if not self.transactions_service.has_titular(preset_socio["numero_socio"]):
+                    QMessageBox.information(
+                        self,
+                        "Registrar movimiento",
+                        f"El número de socio {preset_socio['numero_socio']} no tiene titular asignado. "
+                        "Asigne un titular en Miembros antes de registrar movimientos.",
+                    )
                     return
 
         dialog = TransactionDialog(self, service=self.transactions_service, preset_socio=preset_socio)

@@ -185,6 +185,17 @@ class TestSearchMembers:
         assert added == 1
         assert model.rows[0][7] == "inactivo"  # estado column
 
+    def test_es_titular_column_shows_si_no(self, test_engine):
+        _add_socio(test_engine, numero_socio="1001", nombre="Marta", es_titular=True)
+        _add_socio(test_engine, numero_socio="1002", nombre="Jorge", es_titular=False)
+        service = MembersMenuService()
+        model = _FakeModel()
+
+        service.search_members("", model)
+
+        rows_by_nombre = {row[2]: row[8] for row in model.rows}
+        assert rows_by_nombre == {"Marta": "Sí", "Jorge": "No"}
+
     def test_populates_headers_with_socio_columns(self, test_engine):
         _add_socio(test_engine, numero_socio="1001", nombre="Marta")
         service = MembersMenuService()
@@ -201,5 +212,6 @@ class TestSearchMembers:
             "email",
             "fecha_alta",
             "estado",
+            "es_titular",
             "observaciones",
         ]
