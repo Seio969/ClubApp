@@ -185,3 +185,172 @@ class TestAddTransaction:
             assert logs[0].id_registro_afectado == new_id
             assert logs[0].id_socio == expected_id_socio
             assert logs[0].accion == "crear"
+
+
+class TestDuplicateTransactionRejection:
+    def _base_data(self, session) -> dict:
+        socio = _make_socio(session)
+        metodo = _make_metodo(session)
+        periodo = _make_periodo(session)
+        session.commit()
+        return {
+            "numero_socio": socio.numero_socio,
+            "id_socio_log": socio.id_socio,
+            "id_periodo": periodo.id_periodo,
+            "id_metodo": metodo.id_metodo,
+            "tipo": "cargo",
+            "monto": decimal.Decimal("45.00"),
+            "fecha": datetime.date(2026, 1, 5),
+            "referencia": None,
+        }
+
+    def test_rejects_exact_duplicate(self, test_engine):
+        service = TransactionsService()
+        with Session(test_engine) as session:
+            data = self._base_data(session)
+
+        first_id = service.add_transaction(data)
+        second_id = service.add_transaction(data)
+
+        assert first_id is not None
+        assert second_id is None
+        with Session(test_engine) as session:
+            assert session.query(Transaccion).count() == 1
+
+    def test_allows_same_socio_different_fecha(self, test_engine):
+        service = TransactionsService()
+        with Session(test_engine) as session:
+            data = self._base_data(session)
+
+        first_id = service.add_transaction(data)
+        data2 = dict(data)
+        data2["fecha"] = datetime.date(2026, 1, 6)
+        second_id = service.add_transaction(data2)
+
+        assert first_id is not None
+        assert second_id is not None
+        with Session(test_engine) as session:
+            assert session.query(Transaccion).count() == 2
+
+    def test_validate_transaction_reports_duplicate_without_persisting(self, test_engine):
+        service = TransactionsService()
+        with Session(test_engine) as session:
+            data = self._base_data(session)
+
+        service.add_transaction(data)
+        error = service.validate_transaction(data)
+
+        assert error is not None
+        assert "idéntica" in error
+        with Session(test_engine) as session:
+            assert session.query(Transaccion).count() == 1
+
+
+class TestRefundRequiresPriorPayment:
+    def _setup_pago(self, session, monto: str = "45.00") -> dict:
+        socio = _make_socio(session)
+        metodo = _make_metodo(session)
+        periodo = _make_periodo(session)
+        session.commit()
+        return {
+            "numero_socio": socio.numero_socio,
+            "id_socio_log": socio.id_socio,
+            "id_periodo": periodo.id_periodo,
+            "id_metodo": metodo.id_metodo,
+            "tipo": "pago",
+            "monto": decimal.Decimal(monto),
+            "fecha": datetime.date(2026, 1, 5),
+            "referencia": None,
+        }
+
+    def test_rejects_refund_with_no_prior_payment(self, test_engine):
+        service = TransactionsService()
+        with Session(test_engine) as session:
+            socio = _make_socio(session)
+            metodo = _make_metodo(session)
+            periodo = _make_periodo(session)
+            session.commit()
+            reembolso = {
+                "numero_socio": socio.numero_socio,
+                "id_socio_log": socio.id_socio,
+                "id_periodo": periodo.id_periodo,
+                "id_metodo": metodo.id_metodo,
+                "tipo": "reembolso",
+                "monto": decimal.Decimal("10.00"),
+                "fecha": datetime.date(2026, 1, 6),
+                "referencia": None,
+            }
+
+        new_id = service.add_transaction(reembolso)
+
+        assert new_id is None
+        with Session(test_engine) as session:
+            assert session.query(Transaccion).count() == 0
+
+    def test_allows_refund_covered_by_prior_payment(self, test_engine):
+        service = TransactionsService()
+        with Session(test_engine) as session:
+            pago = self._setup_pago(session, "45.00")
+        service.add_transaction(pago)
+
+        reembolso = dict(pago, tipo="reembolso", monto=decimal.Decimal("20.00"), fecha=datetime.date(2026, 1, 10))
+        new_id = service.add_transaction(reembolso)
+
+        assert new_id is not None
+        with Session(test_engine) as session:
+            assert session.query(Transaccion).filter_by(tipo="reembolso").count() == 1
+
+    def test_rejects_refund_exceeding_prior_payment(self, test_engine):
+        service = TransactionsService()
+        with Session(test_engine) as session:
+            pago = self._setup_pago(session, "45.00")
+        service.add_transaction(pago)
+
+        reembolso = dict(pago, tipo="reembolso", monto=decimal.Decimal("50.00"), fecha=datetime.date(2026, 1, 10))
+        new_id = service.add_transaction(reembolso)
+
+        assert new_id is None
+        with Session(test_engine) as session:
+            assert session.query(Transaccion).filter_by(tipo="reembolso").count() == 0
+
+    def test_rejects_refund_exceeding_pago_minus_prior_reembolso(self, test_engine):
+        service = TransactionsService()
+        with Session(test_engine) as session:
+            pago = self._setup_pago(session, "45.00")
+        service.add_transaction(pago)
+        primer_reembolso = dict(pago, tipo="reembolso", monto=decimal.Decimal("30.00"), fecha=datetime.date(2026, 1, 10))
+        assert service.add_transaction(primer_reembolso) is not None
+
+        segundo_reembolso = dict(pago, tipo="reembolso", monto=decimal.Decimal("20.00"), fecha=datetime.date(2026, 1, 11))
+        new_id = service.add_transaction(segundo_reembolso)
+
+        assert new_id is None
+        with Session(test_engine) as session:
+            assert session.query(Transaccion).filter_by(tipo="reembolso").count() == 1
+
+    def test_scoped_to_periodo_payment_in_other_periodo_does_not_count(self, test_engine):
+        service = TransactionsService()
+        with Session(test_engine) as session:
+            socio = _make_socio(session)
+            metodo = _make_metodo(session)
+            periodo_enero = _make_periodo(session, nombre="Enero", fecha_inicio=datetime.date(2026, 1, 1), fecha_fin=datetime.date(2026, 1, 31))
+            periodo_febrero = _make_periodo(session, nombre="Febrero", fecha_inicio=datetime.date(2026, 2, 1), fecha_fin=datetime.date(2026, 2, 28))
+            session.commit()
+            pago_enero = {
+                "numero_socio": socio.numero_socio,
+                "id_socio_log": socio.id_socio,
+                "id_periodo": periodo_enero.id_periodo,
+                "id_metodo": metodo.id_metodo,
+                "tipo": "pago",
+                "monto": decimal.Decimal("45.00"),
+                "fecha": datetime.date(2026, 1, 5),
+                "referencia": None,
+            }
+            reembolso_febrero = dict(pago_enero, id_periodo=periodo_febrero.id_periodo, tipo="reembolso", monto=decimal.Decimal("10.00"), fecha=datetime.date(2026, 2, 5))
+
+        service.add_transaction(pago_enero)
+        new_id = service.add_transaction(reembolso_febrero)
+
+        assert new_id is None
+        with Session(test_engine) as session:
+            assert session.query(Transaccion).filter_by(tipo="reembolso").count() == 0
