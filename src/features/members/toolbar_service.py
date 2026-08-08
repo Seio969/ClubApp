@@ -66,18 +66,52 @@ class MembersService:
         else:
             logger.info("MembersService.edit_member: edit row=%s", row)
 
-    def delete_members(self, selected_indices: List[int]) -> List[int]:
-        """Return a list of row indices to delete, sorted in reverse order.
+    def delete_members(self, selected_indices: List[int], model_getter: Optional[Callable[[int, int], Any]] = None) -> List[int]:
+        """Deactivate (soft-delete) the members at the given row indices.
 
-        The UI should perform the actual deletion on its model to avoid
-        coupling the service to Qt APIs.
+        Sets estado="inactivo" via UPDATE for each resolved id_socio - never
+        a physical DELETE, so transaction/balance/log history referencing
+        the member is preserved.
+
+        - selected_indices: list of selected row indices (may be empty)
+        - model_getter: callable (row, col) -> item-like object, used to
+          read column 0 (id_socio) for each selected row.
+
+        Returns the row indices (deduped, sorted descending) that were
+        successfully deactivated, so the caller can safely remove those
+        rows from its Qt model without index shifting.
         """
         if not selected_indices:
             logger.warning("MembersService.delete_members: no row selected")
             return []
         rows = sorted(set(selected_indices), reverse=True)
-        logger.info("MembersService.delete_members: will remove %d rows: %s", len(rows), rows)
-        return rows
+        if model_getter is None:
+            logger.warning("MembersService.delete_members: no model_getter provided, cannot resolve id_socio")
+            return []
+
+        deactivated_rows: List[int] = []
+        for row in rows:
+            try:
+                id_item = model_getter(row, 0)
+                val = getattr(id_item, "text", lambda: id_item)()
+                id_socio = int(val)
+            except Exception:
+                logger.exception("MembersService.delete_members: could not resolve id_socio for row=%s", row)
+                continue
+
+            try:
+                with get_session() as session:
+                    socio = session.get(Socio, id_socio)
+                    if socio is None:
+                        logger.warning("MembersService.delete_members: no socio with id_socio=%s", id_socio)
+                        continue
+                    socio.estado = "inactivo"
+                logger.info("MembersService.delete_members: deactivated socio id_socio=%s", id_socio)
+                deactivated_rows.append(row)
+            except Exception as exc:
+                logger.exception("MembersService.delete_members: failed to deactivate id_socio=%s - %s", id_socio, exc)
+
+        return deactivated_rows
 
 
     def export_members(self, rows: Optional[List[List[str]]] = None, destination: Optional[str] = None) -> None:

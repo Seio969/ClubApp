@@ -67,11 +67,11 @@ Computes `BASE_DIR` as two levels up from this file (i.e. the repo root, robustl
 
 ### `src/main.py`
 ```python
-DB_PATH = Path("data/club_manager.db")
+DB_PATH = DATA_DIR / "club_manager.db"
 if not DB_PATH.exists():
     init_db()
 ```
-This existence check uses a **relative** path (relative to the process's current working directory), unlike `config.py`'s absolute `DATA_DIR`. If the app is ever launched from a directory other than the repo root, this check can disagree with where `config.py`/`session.py` actually point the SQLAlchemy engine — e.g. it could decide the DB "doesn't exist" and call `init_db()` even though the real DB file (at the absolute path) is present, or vice versa. Always run from the repo root to avoid this; if you touch this file, prefer reusing `config.DATA_DIR` here instead of a fresh relative `Path`.
+`DB_PATH` is built from `config.DATA_DIR` (the same absolute, `BASE_DIR`-relative path `session.py`'s engine uses), so this check always agrees with where the SQLAlchemy engine actually points regardless of the process's current working directory. Don't reintroduce a fresh `cwd`-relative `Path("data/...")` here.
 `run_main_window()` from `ui/main_window.py` is only invoked under `if __name__ == "__main__"`, so importing `main.py` elsewhere is side-effect-light except for the `init_db()` check above, which runs unconditionally at import time.
 
 ### `src/database/models.py`
@@ -92,7 +92,7 @@ Declares `Base = declarative_base()` and seven ORM classes. All monetary columns
 No Alembic/migration tooling exists — schema changes are made directly in `models.py` and applied via `create_all` (additive only) or by deleting `data/club_manager.db` and re-running `init_db()`.
 
 ### `src/database/session.py`
-`echo` is no longer hardcoded — it reads `_ECHO = os.environ.get("CLUBAPP_DB_ECHO", ...)`, so verbose SQL logging is opt-in (`CLUBAPP_DB_ECHO=1`) instead of always-on. A `connect` event listener sets `PRAGMA journal_mode=WAL` and `PRAGMA synchronous=NORMAL` on every new connection so reads (the table/view browser) aren't blocked behind an in-progress write; it deliberately does **not** set `PRAGMA foreign_keys=ON` (see the docstring — enabling it makes SQLite reject the intentional non-unique `numero_socio` FK relationship). `SessionLocal` (the raw sessionmaker) is still exported, but the preferred way to write is the `get_session()` context manager defined here: it yields a `Session`, commits on success, rolls back and re-raises on exception, and always closes — `MembersService.add_member` (`features/members/toolbar_service.py`) is the first and only caller so far. `view_registry.py` still talks to the DB via raw `engine.connect()` + `text()`, not the ORM session.
+`echo` is no longer hardcoded — it reads `_ECHO = os.environ.get("CLUBAPP_DB_ECHO", ...)`, so verbose SQL logging is opt-in (`CLUBAPP_DB_ECHO=1`) instead of always-on. A `connect` event listener sets `PRAGMA journal_mode=WAL` and `PRAGMA synchronous=NORMAL` on every new connection so reads (the table/view browser) aren't blocked behind an in-progress write; it deliberately does **not** set `PRAGMA foreign_keys=ON` (see the docstring — enabling it makes SQLite reject the intentional non-unique `numero_socio` FK relationship). `SessionLocal` (the raw sessionmaker) is still exported, but the preferred way to write is the `get_session()` context manager defined here: it yields a `Session`, commits on success, rolls back and re-raises on exception, and always closes — `MembersService.add_member` and `MembersService.delete_members` (`features/members/toolbar_service.py`) are its callers so far. `view_registry.py` still talks to the DB via raw `engine.connect()` + `text()`, not the ORM session.
 
 ### `src/database/init_db.py`
 Just `Base.metadata.create_all(bind=engine)` plus a log line. No seed data is inserted (e.g. `metodos_pago` rows for REMESA/EFECTIVO/TRANSFERENCIA/etc. from the README are not created anywhere in code).
@@ -124,7 +124,7 @@ Central mechanism for generic, DB-driven table browsing:
 UI-decoupled backend for the members toolbar. Most methods are still logging placeholders; `add_member` now persists (see below):
 - `add_member(data)`: creates a `Socio` row via `database.session.get_session()` and returns its new `id_socio`, or `None` on failure.
 - `edit_member(selected_indices, model_getter)`: if a row is selected, best-effort reads column-0's value via the provided `model_getter` callback and logs it; otherwise logs a warning. No edit dialog or persistence.
-- `delete_members(selected_indices)`: **does not delete from the DB.** It only returns the selected row indices (deduped, sorted descending so the caller can safely `removeRow` without index shifting). The actual `model.removeRow()` call happens in `MembersToolBar.on_delete_member` — so today "delete" only removes the row from the *in-memory Qt table model*, not from SQLite. Reloading the view (or restarting) will bring the row back.
+- `delete_members(selected_indices, model_getter)`: **soft-delete only, never a physical `DELETE`** — for each selected row it reads column-0 (`id_socio`) via `model_getter`, then updates that `Socio.estado = "inactivo"` via `get_session()`. **Decided (durable):** "Eliminar" in the members toolbar always means deactivation via `UPDATE estado = "inactivo"`, so transaction/balance/log history referencing the member is preserved — a physical `DELETE FROM socios` path is not planned. Returns the row indices (deduped, sorted descending) that were successfully deactivated; `MembersToolBar.on_delete_member` then calls `model.removeRow(r)` on those for immediate UI feedback. Since nothing filters by `estado` yet, a deactivated member still reappears (now correctly marked `estado="inactivo"`) the next time the view is reloaded — a confirmation dialog before this action and estado-aware filtering/display are still unbuilt.
 - `export_members(rows, destination)`: logs the row count and destination; no file is written. Pairs with `utils/exporters.py`, which is currently an **empty file** — implementing export means starting there.
 - `register_transactions(selected_indices)`: logs selected indices or "opening general register" if none selected; no dialog/persistence yet.
 
@@ -138,14 +138,7 @@ UI-decoupled backend for the members toolbar. Most methods are still logging pla
 Completely empty (0 bytes) — no exports, no stub function, nothing. This is where Excel/PDF export (per the README's "Exportar reportes a Excel/PDF" requirement) would presumably live; no export library (e.g. `openpyxl`, `reportlab`) is currently in `pyproject.toml`'s dependencies.
 
 ### `src/ui/styles.py`
-Three `Final[str]` constants: `MAIN_MENU_STYLESHEET`, `MEMBERS_MENU_STYLESHEET` (Qt QSS strings), plus two small inline-style snippets `TITLE_STYLE`/`BUTTON_FONT_STYLE`. **Bug/quirk to know about**: inside `MEMBERS_MENU_STYLESHEET`, near the end, someone tried to comment out a QSS rule using `#`-prefixed lines (Python-comment style):
-```css
-# /* Make sure header section text is also black */
-# #resultsTable QHeaderView::section {
-#     color: #000000;
-}
-```
-QSS doesn't support `#` line comments (only `/* ... */`), and `#` is the ID-selector token — so this block is malformed CSS with a dangling, unmatched `}`. Qt's stylesheet parser is generally lenient about unparseable fragments (it's silently ignored rather than crashing the app), but the intended rule (header text color) is **not actually applied**. If header text color ever looks wrong, this is why — fix by converting to a real `/* ... */` comment or a proper `#resultsTable QHeaderView::section { color: #000000; }` rule.
+Three `Final[str]` constants: `MAIN_MENU_STYLESHEET`, `MEMBERS_MENU_STYLESHEET` (Qt QSS strings), plus two small inline-style snippets `TITLE_STYLE`/`BUTTON_FONT_STYLE`. `MEMBERS_MENU_STYLESHEET` includes a `#resultsTable QHeaderView::section { color: #000000; }` rule so header text stays black. Remember QSS only supports `/* ... */` comments — a `#`-prefixed "comment" is silently parsed as a malformed ID-selector block instead of being ignored, which is how a prior version of this rule went dead without erroring.
 
 ### `src/ui/main_window.py`
 `MainWindow(QMainWindow)`: sets title "AppClub", resizes to 900×600, creates a `QStackedWidget` as central widget, adds a `MainMenuWidget` (stored as `self._home`) as the first page, and attaches a `MainMenuBar`. `run_main_window(argv)` builds the `QApplication`, shows the window, and runs `app.exec()`. Deliberately has no GUI side effects at import time (per its own docstring) so it stays importable for future tests/tooling.
@@ -184,28 +177,10 @@ Key behaviors:
 
 ### `src/features/members/toolbar.py` — `MembersToolBar(QToolBar)`
 Non-movable toolbar, 18×18 icons, actions built from Qt's built-in `QStyle.SP_*` standard icons (no custom icon assets in the repo): Nuevo (`SP_FileIcon`) → `on_add_member`; Editar (`SP_DialogApplyButton`) → `on_edit_member`; Eliminar (`SP_TrashIcon`) → `on_delete_member`; separator; Refrescar (`SP_BrowserReload`) → `on_refresh`; Exportar (`SP_DialogSaveButton`) → `on_export`; Registrar (`SP_DialogOpenButton`) → `on_register_movements`. Takes an optional `MembersService` (defaults to constructing its own). `set_table_references(table, model)` is called by the parent view right after construction so the toolbar can read selection/model state without owning it.
-- `on_edit_member`/`on_delete_member`: read selected row indices from `self.table.selectionModel().selectedRows()`, delegate the decision logic to `MembersService`, then apply the result to the Qt model themselves (e.g. `on_delete_member` actually calls `self.model.removeRow(r)` for each index the service returns) — see the caveat above that this only mutates the in-memory table, not the database.
-- `on_export`: flattens the current model into `list[list[str]]` (missing items become `""`) and passes to `MembersService.export_members` — again, currently a no-op logger call.
-
-**Known bug — `on_refresh` silently misbehaves due to indentation.** The method body's final statement is mis-indented to match the `def` line instead of the method body:
-```python
-def on_refresh(self) -> None:
-    """Handle refresh action."""
-# If the parent view provides a refresh_table method prefer that so
-# the UI reloads the actual DB-backed view. If not available, do
-# nothing (avoid inserting demo/sample rows).
-    parent = self.parent()
-    if parent is not None and hasattr(parent, "refresh_table"):
-        try:
-            parent.refresh_table()
-            return
-        except Exception as exc:
-            logger.exception("MembersToolBar.on_refresh: parent.refresh_table failed - %s", exc)
-
-    # No parent refresh available...
-logger.info("MembersToolBar.on_refresh: no parent.refresh_table available - nothing to refresh")
-```
-(indentation reproduced faithfully from the actual file — the trailing `logger.info(...)` line sits at the same indent level as `def`, i.e. class-body level, not inside the function). This is valid Python (a class body can contain arbitrary statements), so it doesn't raise a `SyntaxError` — but it means that `logger.info(...)` call runs **exactly once, at class-definition/import time**, not every time "Refrescar" is clicked with no working parent fallback. Practically: if `parent.refresh_table()` exists and succeeds, `on_refresh` behaves correctly (returns early inside the `if`). But if there's no usable parent (or `refresh_table` raises), the method now falls off the end silently — no log, no error — instead of logging the intended "nothing to refresh" message. If you're debugging why refresh appears to do nothing with no log trace, this is why; fix by re-indenting that final `logger.info` call to match the rest of the method body (8 spaces).
+- `on_edit_member`: reads selected row indices from `self.table.selectionModel().selectedRows()`, delegates to `MembersService.edit_member` — no persistence yet (see that method's notes above).
+- `on_delete_member`: reads selected row indices, passes them plus a `model_getter` closure to `MembersService.delete_members` (so the service can resolve each row's `id_socio`), then calls `self.model.removeRow(r)` for each row index the service confirms was deactivated in the DB.
+- `on_refresh`: prefers `parent.refresh_table()` when the parent view exposes one; otherwise logs and no-ops (deliberately does not fall back to inserting demo/sample rows).
+- `on_export`: flattens the current model into `list[list[str]]` (missing items become `""`) and passes to `MembersService.export_members` — currently a no-op logger call.
 
 ## Cross-cutting notes
 

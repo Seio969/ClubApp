@@ -122,23 +122,31 @@ class MembersToolBar(QToolBar):
         self.service.edit_member(indices, model_getter)
 
     def on_delete_member(self) -> None:
-        """Handle delete member action."""
+        """Handle delete member action (deactivates the member, never a physical delete)."""
         if self.table is None:
             self.service.delete_members([])
             return
         sel = self.table.selectionModel().selectedRows()
         indices = [s.row() for s in sel] if sel else []
-        rows_to_remove = self.service.delete_members(indices)
-        # Perform actual deletion on the model
+
+        def model_getter(row: int, col: int):
+            if self.model is None:
+                return None
+            return self.model.item(row, col)
+
+        rows_to_remove = self.service.delete_members(indices, model_getter)
+        # Rows returned here were already deactivated (estado="inactivo") in
+        # the database; remove them from the in-memory model for immediate
+        # feedback.
         if self.model is not None and rows_to_remove:
             for r in rows_to_remove:
                 self.model.removeRow(r)
 
     def on_refresh(self) -> None:
         """Handle refresh action."""
-    # If the parent view provides a refresh_table method prefer that so
-    # the UI reloads the actual DB-backed view. If not available, do
-    # nothing (avoid inserting demo/sample rows).
+        # If the parent view provides a refresh_table method prefer that so
+        # the UI reloads the actual DB-backed view. If not available, do
+        # nothing (avoid inserting demo/sample rows).
         parent = self.parent()
         if parent is not None and hasattr(parent, "refresh_table"):
             try:
@@ -151,7 +159,7 @@ class MembersToolBar(QToolBar):
         # sample-data helper; that behaviour populated demo rows which is
         # undesirable. Keep this a no-op and let callers provide a proper
         # refresh_table implementation on the parent view.
-    logger.info("MembersToolBar.on_refresh: no parent.refresh_table available - nothing to refresh")
+        logger.info("MembersToolBar.on_refresh: no parent.refresh_table available - nothing to refresh")
 
     def on_export(self) -> None:
         """Handle export action."""

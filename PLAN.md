@@ -12,12 +12,11 @@ This document lists, by category, everything that's pending and proposes an exec
 
 ## 1. Known bugs to fix first
 
-Fix these before building more on top, since they're cheap to fix and avoid confusion when debugging new features.
-
-1. **`src/features/members/toolbar.py::on_refresh`** — broken indentation: the final `logger.info(...)` sits at class level, not method level. It runs exactly once, at module import time, instead of every time "Refrescar" (Refresh) is clicked with no `refresh_table` available. It's valid Python (doesn't fail), but it silences the expected log line. **Fix**: re-indent that line to 8 spaces, inside the method.
-2. **`src/ui/styles.py::MEMBERS_MENU_STYLESHEET`** — a "comment" block using Python-style `#` inside a QSS block (which doesn't support `#...` line comments, only `/* ... */`). This leaves a malformed CSS rule with a dangling `}`; the table header text color is never applied. **Fix**: convert it to a real `/* ... */` comment or to a proper `#resultsTable QHeaderView::section { color: #000000; }` rule.
-3. **`src/main.py`** — uses `Path("data/club_manager.db")` (relative to the process's cwd) to decide whether to call `init_db()`, while `config.py`/`session.py` use an absolute (`BASE_DIR`-relative) path. If the app is ever launched from a directory other than the repo root, this check can get out of sync with the real DB. **Fix**: reuse `config.DATA_DIR` instead of a fresh relative `Path`.
-4. **Deactivating members "without deleting history" (README requirement)** — `delete_members` in `toolbar_service.py` currently doesn't touch the database at all, only the in-memory table row (the record reappears on reload). It doesn't even implement the soft-delete (`estado = "inactivo"`) the README asks for; today there is no real path to deactivate a member.
+**Completed** (branch `fix/quick-bugs-plan-section-1`):
+- [x] `on_refresh` indentation fixed
+- [x] Dead QSS header-color comment fixed
+- [x] `main.py` DB-path check now uses `config.DATA_DIR`
+- [x] `delete_members` now soft-deletes via DB `UPDATE`
 
 ---
 
@@ -30,8 +29,8 @@ Everything below already has an ORM model declared in `models.py` but **zero UI 
 - **Pending**: `EditMemberDialog` (can reuse/generalize `MemberDialog` with a pre-populated "edit" mode) + `MembersService.update_member(id_socio, data)` using `get_session()`.
 
 ### 2.2 Deactivating members (not physical deletion)
-- The README asks for deactivation without losing history. `estado = "inactivo"` via UPDATE (not `DELETE FROM socios`) still needs implementing, respecting the relationships (`transacciones`, `saldos`, `logs`).
-- **Decided**: "Eliminar" (Delete) in the toolbar becomes soft-delete only — always `estado = "inactivo"` via UPDATE, never a physical `DELETE`. No separate physical-delete path is planned.
+- The core mechanism is done: `MembersService.delete_members` sets `estado = "inactivo"` via `UPDATE` (never `DELETE FROM socios`) — see `CLAUDE.md`'s `toolbar_service.py` notes for the durable soft-delete decision.
+- **Still pending**: a confirmation dialog before the action fires (4.4), and estado-aware filtering/display — today a deactivated member still shows up (now correctly marked `inactivo`) on the next reload since nothing filters by `estado` yet.
 
 ### 2.3 Real member search & data loading
 - `MembersMenuService.search_members` is a placeholder marked `# FIXME` that fabricates a fake row (`["1", text, "n/a@example.com", "Activo"]`) — it doesn't query the DB at all.
