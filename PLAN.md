@@ -97,6 +97,23 @@ Everything below already has an ORM model declared in `models.py` but **zero UI 
 - **Decided (workflow):** analyze and document first, agree on the implementation mapping, *then* implement inside the relevant `features/<domain>/` package — not a direct/blind port of VBA into Python.
 - Depends on: the user attaching the `.xlsm` file (not yet done as of this entry).
 
+### 2.17 "Titular" (primary holder) per `numero_socio`
+- **New request**, surfaced while using the transactions module (`feat/transactions-module`): `numero_socio` is a shared family/household identifier (see `models.py`'s note — deliberately not unique per `Socio` row), and when registering/browsing transactions it's confusing that every family member sharing a número shows up as an equally-valid, undistinguished option. The request is to designate exactly one "titular" (primary holder) per `numero_socio`.
+- **Not started** — no schema change, no service/UI work done yet. This is a separate chunk from the transactions module and should get its own branch/PR (stacked on `feat/transactions-module` until that's merged, since it needs `TransactionDialog`/`TransactionsService` to exist).
+- **Decided (durable) — captured from user Q&A before deferring implementation:**
+  - **Data model**: add `Socio.es_titular` (boolean, default `False`). Setting one Socio as titular **auto-unsets** any other Socio row sharing that `numero_socio` — never two `True` at once for the same número. Needs the usual `_add_missing_columns()` stopgap in `database/init_db.py` (same pattern as `MetodoPago.estado`/`ReglaCobro.estado`), since it's a column added after `socios` already exists.
+  - **Swap confirmation**: when a save would replace an existing titular with a different one, the UI must warn and ask for confirmation before proceeding (e.g. "¿Reemplazar a X como titular del número N por Y?") — not a silent swap.
+  - **Transaction picker scope**: both the `TransactionDialog` socio picker and the standalone Transacciones screen's Socio column/search should default to showing/matching the **titular** per número — but the picker must still allow registering a transaction under a *different* (non-titular) family member when needed; it shouldn't hard-block that. There's also an open ask to be able to see that a *different* person was the titular in the past (a history/audit view) — the existing `Log`/`record_log` mechanism can capture titular-change events (`accion="cambio_titular"`, matching the pattern other services already use), but an actual UI to browse that history doesn't exist yet (ties into 2.12's still-open "logs" screen decision) — recording the log rows is in scope for this item, a dedicated history viewer is not, unless the user asks for it when this chunk is picked up.
+  - **New `numero_socio` requires a titular immediately**: when creating the *first* `Socio` row for a `numero_socio` that doesn't exist yet in the DB, that row must become the titular — there's no valid "unset" state for a brand-new número (unlike existing ones, see below).
+  - **Existing data**: no backfill/migration for `numero_socio` groups that predate this feature — they're left with no titular, and **blocked** from being used in the transaction dialog's picker until an admin explicitly edits a member and marks them titular via Members/Ajustes.
+- **Build sketch for whoever picks this up** (not yet validated against the actual code, just a starting sketch from the design conversation):
+  1. `models.py`: `Socio.es_titular` column; `init_db.py`'s `_add_missing_columns()` gets the matching `ALTER TABLE`.
+  2. `MembersService`: `get_titular(numero_socio) -> Optional[dict]`; `add_member`/`update_member` gain the auto-unset-other-titular + audit-log logic, plus the new-número-requires-titular rule (likely enforced/auto-corrected server-side rather than only in the dialog).
+  3. `MemberDialog`: add an "Es titular" checkbox; `MembersToolBar.on_add_member`/`on_edit_member` check `get_titular()` before saving and show the swap-confirmation `QMessageBox` when needed (mirrors `_confirm_deactivation`'s existing shape).
+  4. `TransactionsService.list_socios_activos()`: include `es_titular` per row so the dialog can default its visible list to titulares while still resolving a searched-for non-titular pick.
+  5. `TransactionDialog`: default the socio combo to titulares only, but keep search (via `QCompleter`) able to find and select any active socio, dynamically adding a non-titular pick as a combo item once chosen.
+  6. `TransactionsService.list_transactions()`: prefer the titular's name (not an arbitrary first-by-id pick) when building the `numero_socio -> display name` map.
+
 ---
 
 ## 3. Technical debt / infrastructure
@@ -140,6 +157,7 @@ Everything below already has an ORM model declared in `models.py` but **zero UI 
 9. **Backups** (2.10) and **import** (2.11) — more independent features, can be tackled in parallel or at the end.
 10. **Long-term non-functionals**: Alembic (a technical prerequisite — move it earlier if the schema starts changing a lot), encryption (2.13), Postgres migration (2.14) — these come into play once the functional domain is more mature and there's real data to protect.
 11. **Visual/UI polish** (4.3) — best done once the screens it applies to actually exist (transactions/periods/reports), so styling isn't reworked twice; earlier if the user wants the look-and-feel decided up front instead.
+12. **Titular per numero_socio** (2.17) — queued right after the transactions module PR merges (it depends on `TransactionDialog`/`TransactionsService` existing on `main`); design already decided, see 2.17 for the build sketch.
 
 ---
 
@@ -154,3 +172,4 @@ All previously open questions have been answered by the user; nothing outstandin
 - **Transactions navigation model**: both entry points, not either/or — the Members toolbar's "Registrar" button stays as a socio-pre-filled shortcut, *and* a standalone `Transacciones` screen is added to the main menu for club-wide browsing/filtering (README's fecha/tipo/estado filter requirement needs the standalone screen; the quick shortcut alone couldn't satisfy it). Both share one dialog and one service. See 2.4.
 - **Transaction integrity rules**: a reembolso can't exceed (sum of pago − sum of already-refunded reembolso) scoped to the same numero_socio+período; an exact-duplicate Transaccion (same numero_socio/tipo/monto/id_periodo/id_metodo/fecha) is rejected. See `CLAUDE.md`'s `features/transactions/service.py` section.
 - **Balance recalculation sequencing**: deferred until the legacy `.xlsm` (2.15b) is analyzed, rather than guessing at the formula while building the transactions module. See 2.5.
+- **Titular model**: `Socio.es_titular` boolean, auto-unset-other-on-set (with a UI swap confirmation), a brand-new `numero_socio` must get a titular immediately, existing `numero_socio` groups are left unset/blocked until an admin assigns one manually (no auto-backfill). See 2.17.
