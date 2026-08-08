@@ -92,6 +92,16 @@ No `features/transactions/` exists yet.
 - Non-functional requirement; today `DATABASE_URL` is hardcoded to SQLite in `config.py` and there's no Alembic or any schema-migration layer — only additive `create_all`. Introducing Alembic would be a reasonable prerequisite before attempting the move to Postgres.
 - **Decided**: long-term goal, same as 2.13 — keep using `create_all`/SQLite for now; no Alembic work scheduled yet.
 
+### 2.15b Legacy Excel (`.xlsm`) analysis — source of truth this app is replacing
+- **New request.** The club currently runs this process out of a hand-built `.xlsm` workbook; this repo is meant to **replace** it. The file has not been attached to the repo yet — this item tracks the analysis step for when it is.
+- **Scope of the analysis, once the file is attached:**
+  1. Unzip the `.xlsm` (it's a zip container, same as `.xlsx` plus a macro part) and read `xl/worksheets/*.xml`, formulas, and named ranges directly, or via `openpyxl`/`pandas`.
+  2. Extract and decompile the VBA project (`xl/vbaProject.bin`, OLE/Compound-File binary — not plain-text) using `oletools`/`olevba` (add as a throwaway dev dependency or run in an isolated scratch venv; not a runtime dependency of the app itself) to get the actual macro source.
+  3. Document, in plain language, what each sheet/macro computes — cuota/penalización/descuento rules, balance carry-over, any reporting/export macros — and cross-reference against `ReglaCobro`'s existing (currently orphaned, see 2.7) columns and the balance logic gap in 2.5, since this workbook is likely the actual origin of both.
+  4. Produce a mapping from "what the workbook does" → "which planned feature/service it belongs to" (2.4 transactions, 2.5 balances, 2.7 billing rules/settings, 2.8 reports) before writing implementation code — this is analysis-and-mapping, not a build step itself.
+- **Decided (workflow):** analyze and document first, agree on the implementation mapping, *then* implement inside the relevant `features/<domain>/` package — not a direct/blind port of VBA into Python.
+- Depends on: the user attaching the `.xlsm` file (not yet done as of this entry).
+
 ### 2.15 Settings action: reset database
 - **New request.** Not mentioned elsewhere in this plan and not implemented anywhere in the repo — `init_db.py` only ever calls `Base.metadata.create_all(bind=engine)`, which creates missing tables but never drops or clears existing ones (see `CLAUDE.md`'s note on this). There is currently no code path that wipes/reinitializes the database at all.
 - **Decided (scope)**: support both a **full wipe** (delete `data/club_manager.db` entirely, or `drop_all` + `create_all`, then re-run seed data so `metodos_pago` etc. aren't left empty) and a **scoped reset** (clear only transactions/balances/periods while keeping members and settings intact).
