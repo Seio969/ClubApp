@@ -27,6 +27,10 @@ class MetodoPago(Base):
     __tablename__ = "metodos_pago"
     id_metodo = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, nullable=False, unique=True)
+    # activo/inactivo, same soft-deactivation pattern as Socio.estado - a
+    # payment method is never physically deleted, only deactivated, so
+    # transactions that already reference it keep a meaningful name.
+    estado = Column(String, default="activo")
 
     transacciones = relationship("Transaccion", back_populates="metodo")
 
