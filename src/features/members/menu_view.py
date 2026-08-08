@@ -1,8 +1,11 @@
 """Members menu view.
 
-Layout requested:
-- Top: a horizontal "roll" that will hold buttons for future table/views.
-- Below the top bar: the query results (table view) occupying the main area.
+Top bar holds: back button, search box, results limit, and a "Filtros"
+column-visibility menu. The old "Vistas" dropdown - which let this screen
+browse any table in the DB via ViewRegistry's generic SELECT * dump - has
+been removed entirely (PLAN.md 2.16): Members only ever shows the socios
+table now, loaded through MembersMenuService's real query.
+Below the top bar: the query results (table view) occupying the main area.
 
 This file provides a ready-to-use QWidget that can be added to the main window stack.
 The right-side vertical action menu was removed per UI simplification.
@@ -142,25 +145,13 @@ class MembersMenuView(QWidget, TableSortMixin):
         top_layout.addWidget(middle_group, 0, Qt.AlignmentFlag.AlignCenter)
         top_layout.addStretch(1)
 
-        # Right group: views menu and (future) actions
+        # Right group: column-visibility filters. (The "Vistas" table
+        # picker that used to live here was removed - see module docstring.)
         right_group = QWidget(top_bar)
         right_group.setObjectName("topRightGroup")
         right_layout = QHBoxLayout(right_group)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(8)
-
-        self.views_button = QToolButton(right_group)
-        self.views_button.setObjectName("viewsButton")
-        self.views_button.setText("Vistas")
-        self.views_button.setToolTip("Seleccionar vista")
-        self.views_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.views_button.setMinimumWidth(140)
-        self.views_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.views_menu = QMenu(self.views_button)
-        self.views_button.setMenu(self.views_menu)
-        self.views_button.setIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
-        self.views_button.setAutoRaise(True)
-        right_layout.addWidget(self.views_button)
 
         # Filters dropdown: will contain checkable actions for each column
         self.filters_button = QToolButton(right_group)
@@ -242,27 +233,11 @@ class MembersMenuView(QWidget, TableSortMixin):
 
         # Small, pleasant stylesheet to make layout readable
         self.setStyleSheet(MEMBERS_MENU_STYLESHEET)
-        # Populate views dropdown dynamically from service-registered views
-        self._populate_db_views()
 
-        # Try to load a preferred view automatically (if available).
-        # Prefer 'socios' (case-insensitive). Fallback to the first registered view.
+        # Load the members table - the only data source this screen shows
+        # (see module docstring for why the old multi-table picker is gone).
         try:
-            views = self._service.get_views()
-            chosen = None
-            if views:
-                for v in views:
-                    try:
-                        #TODO Add this variable to settings or config to be chosen by the user
-                        if str(v).lower() == "socios":
-                            chosen = v
-                            break
-                    except Exception:
-                        continue
-                if chosen is None:
-                    chosen = views[0]
-                if chosen:
-                    self.load_table_view(chosen)
+            self.load_table_view()
         except Exception:
             pass
 
@@ -298,12 +273,6 @@ class MembersMenuView(QWidget, TableSortMixin):
         """Expand visible columns to fill available viewport width."""
         _ensure_columns_fill(self.table, self.model)
 
-    # Track the currently loaded view name so the toolbar can request a
-    # refresh that reloads the same data from the DB.
-    # (already initialized at top of __init__)
-    #TODO have a look at above comment
-        
-
     # ---------------------- placeholder event handlers -------------------------
     def on_back_to_main_menu(self) -> None:
         """Navigate back to the main menu."""
@@ -311,16 +280,6 @@ class MembersMenuView(QWidget, TableSortMixin):
             self.main_window._stack.setCurrentWidget(self.main_window._home)
         else:
             logger.warning("No se pudo navegar al menú principal")
-
-    def on_select_view(self, name: str) -> None:
-        """Called when the user clicks one of the view buttons in the top rolling bar.
-
-        In a real app this would switch the visible table/model to the selected view.
-        """
-        logger.info("Seleccionada vista: %s", name)
-        # In a real app switching views would change the model/columns.
-        # For now, repopulate the filters menu so it reflects the active model.
-        self._populate_filters_menu()
 
     def _populate_filters_menu(self) -> None:
         """Create checkable actions for each column in the current model.
@@ -387,60 +346,34 @@ class MembersMenuView(QWidget, TableSortMixin):
 
     def on_limit_changed(self) -> None:
         """Handle when user presses Enter in the limit input field.
-        
-        This will refresh the current view with the new limit.
+
+        Reloads the members table with the new limit.
         """
         limit = self.get_limit()
         logger.info("Límite cambiado a: %s", limit if limit is not None else 'sin límite')
-
-        # If we have a current view loaded, refresh it with the new limit
-        if hasattr(self, '_current_view_name') and self._current_view_name:
-            logger.info("Refrescando vista '%s' con nuevo límite", self._current_view_name)
-            try:
-                self.load_table_view(self._current_view_name)
-            except Exception as exc:
-                logger.exception("Error al refrescar vista con nuevo límite: %s", exc)
-            return
-
-        # If no specific view is loaded, try to refresh the table
-        logger.info("Refrescando tabla con nuevo límite")
         try:
             self.refresh_table()
         except Exception as exc:
             logger.exception("Error al refrescar tabla con nuevo límite: %s", exc)
 
+    def load_table_view(self) -> None:
+        """Reload the members table (socios) from the database.
 
-    def _populate_db_views(self) -> None:
-        """Populate the views dropdown with actual database table names."""
-        self.views_menu.clear()
-        try:
-            views = self._service.get_views()
-            if not views:
-                # fallback: keep a demo entry so the menu isn't empty
-                action = self.views_menu.addAction("No hay vistas registradas")
-                action.setEnabled(False)
-                return
-
-            for name in views:
-                action = self.views_menu.addAction(name)
-                action.triggered.connect(lambda checked=False, n=name: self.load_table_view(n))
-        except Exception as exc:
-            logger.exception("MembersMenuView._populate_db_views: failed - %s", exc)
-
-    def load_table_view(self, table_name: str) -> None:
-        """Load the named table into the results table by querying the DB.
-
-        This calls the service.fetch_view which validates/dispatches the view
-        (table/sql/callable) and populates the model.
+        Goes through the real, members-owned query
+        (MembersMenuService.search_members with no filter) rather than
+        the generic ViewRegistry dump this screen used to fall back to -
+        the old "Vistas" dropdown that picked among arbitrary DB tables
+        has been removed entirely (PLAN.md 2.16); Members only ever shows
+        socios now.
         """
-        logger.info("Cargando vista: %s", table_name)
         limit = self.get_limit()
-        logger.info("Aplicando límite: %s", limit)
+        logger.info("Cargando socios con límite: %s", limit)
 
-        # remember which view is currently loaded so refresh can re-run it
-        self._current_view_name = table_name
-        added = self._service.fetch_view(table_name, self.model, limit=limit)
-        logger.info("Cargadas %d filas desde vista '%s' con límite %s", added, table_name, limit)
+        # kept for TableSortMixin, which checks this before reloading on
+        # sort-clear; always "socios" now that there's nothing else to load.
+        self._current_view_name = "socios"
+        added = self._service.search_members("", self.model, limit=limit)
+        logger.info("Cargados %d socios con límite %s", added, limit)
 
         # Refresh filters menu to match new columns
         self._populate_filters_menu()
@@ -458,27 +391,11 @@ class MembersMenuView(QWidget, TableSortMixin):
             pass
 
     def refresh_table(self) -> None:
-        """Reload the currently selected/loaded table view.
-
-        This re-invokes the same logic as `load_table_view` for the
-        previously loaded view name. If no view is loaded, try to load
-        the first available view from the service.
-        """
-        if self._current_view_name:
-            try:
-                self.load_table_view(self._current_view_name)
-            except Exception as exc:
-                logger.exception("MembersMenuView.refresh_table: failed - %s", exc)
-            return
-
-        # No current view selected; attempt to load the first registered view
+        """Reload the members table from the database."""
         try:
-            views = self._service.get_views()
-            if views:
-                self.load_table_view(views[0])
-        except Exception:
-            # nothing to refresh
-            pass
+            self.load_table_view()
+        except Exception as exc:
+            logger.exception("MembersMenuView.refresh_table: failed - %s", exc)
 
     # Sorting behaviour (header-click cycle, diacritic-aware compare) lives in
     # TableSortMixin (see table_sort.py) — this class only owns the sort state

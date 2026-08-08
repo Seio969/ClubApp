@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Callable, Dict, List, Optional, Any
 
+from database.audit import record_log
 from database.models import Socio
 from database.session import get_session
 from utils.logger import get_logger
@@ -34,6 +35,17 @@ class MembersService:
                 session.add(socio)
                 session.flush()  # populate id_socio before the session closes
                 new_id = socio.id_socio
+                record_log(
+                    session,
+                    id_socio=new_id,
+                    accion="crear",
+                    tabla_afectada="socios",
+                    id_registro_afectado=new_id,
+                    descripcion_cambio=(
+                        f"Alta de socio numero_socio={data.get('numero_socio')} "
+                        f"nombre={data.get('nombre')} {data.get('apellidos')}"
+                    ),
+                )
             logger.info(
                 "MembersService.add_member: created socio id=%s numero_socio=%s",
                 new_id,
@@ -44,27 +56,66 @@ class MembersService:
             logger.exception("MembersService.add_member: failed to create member - %s", exc)
             return None
 
-    def edit_member(self, selected_indices: List[int], model_getter: Optional[Callable[[int, int], Any]] = None) -> None:
-        """Prepare an edit operation for the first selected index.
+    def get_member(self, id_socio: int) -> Optional[Dict[str, Any]]:
+        """Fetch a single member's editable fields by id_socio.
 
-        - selected_indices: list of selected row indices (may be empty)
-        - model_getter: optional callable (row, col) -> item-like object
+        Returns a dict shaped like MemberDialog.get_data()'s output (ready
+        to pre-populate the edit dialog), or None if no such member exists
+        or the fetch fails.
         """
-        if not selected_indices:
-            logger.warning("MembersService.edit_member: no row selected")
-            return
-        row = selected_indices[0]
-        if model_getter is not None:
-            try:
-                id_item = model_getter(row, 0)
-                # If the getter returns a Qt item-like object, attempt to
-                # read a text/value attribute in a best-effort manner.
-                val = getattr(id_item, "text", lambda: id_item)()
-                logger.info("MembersService.edit_member: edit id=%s", val)
-            except Exception:
-                logger.info("MembersService.edit_member: edit row=%s", row)
-        else:
-            logger.info("MembersService.edit_member: edit row=%s", row)
+        try:
+            with get_session() as session:
+                socio = session.get(Socio, id_socio)
+                if socio is None:
+                    logger.warning("MembersService.get_member: no socio with id_socio=%s", id_socio)
+                    return None
+                return {
+                    "numero_socio": socio.numero_socio,
+                    "nombre": socio.nombre,
+                    "apellidos": socio.apellidos,
+                    "telefono": socio.telefono,
+                    "email": socio.email,
+                    "fecha_alta": socio.fecha_alta,
+                    "estado": socio.estado,
+                    "observaciones": socio.observaciones,
+                }
+        except Exception as exc:
+            logger.exception("MembersService.get_member: failed to fetch id_socio=%s - %s", id_socio, exc)
+            return None
+
+    def update_member(self, id_socio: int, data: Dict[str, Any]) -> bool:
+        """Persist edits to an existing member (Socio).
+
+        `data` should contain the Socio field values (see
+        MemberDialog.get_data()). Returns True on success, False if the
+        member doesn't exist or the update fails.
+        """
+        try:
+            with get_session() as session:
+                socio = session.get(Socio, id_socio)
+                if socio is None:
+                    logger.warning("MembersService.update_member: no socio with id_socio=%s", id_socio)
+                    return False
+                changes = [
+                    f"{key}: {getattr(socio, key)!r} -> {value!r}"
+                    for key, value in data.items()
+                    if getattr(socio, key) != value
+                ]
+                for key, value in data.items():
+                    setattr(socio, key, value)
+                record_log(
+                    session,
+                    id_socio=id_socio,
+                    accion="editar",
+                    tabla_afectada="socios",
+                    id_registro_afectado=id_socio,
+                    descripcion_cambio="; ".join(changes) if changes else "sin cambios en los campos",
+                )
+            logger.info("MembersService.update_member: updated socio id_socio=%s", id_socio)
+            return True
+        except Exception as exc:
+            logger.exception("MembersService.update_member: failed to update id_socio=%s - %s", id_socio, exc)
+            return False
 
     def delete_members(self, selected_indices: List[int], model_getter: Optional[Callable[[int, int], Any]] = None) -> List[int]:
         """Deactivate (soft-delete) the members at the given row indices.
@@ -106,6 +157,14 @@ class MembersService:
                         logger.warning("MembersService.delete_members: no socio with id_socio=%s", id_socio)
                         continue
                     socio.estado = "inactivo"
+                    record_log(
+                        session,
+                        id_socio=id_socio,
+                        accion="desactivar",
+                        tabla_afectada="socios",
+                        id_registro_afectado=id_socio,
+                        descripcion_cambio=f"Socio numero_socio={socio.numero_socio} marcado como inactivo",
+                    )
                 logger.info("MembersService.delete_members: deactivated socio id_socio=%s", id_socio)
                 deactivated_rows.append(row)
             except Exception as exc:

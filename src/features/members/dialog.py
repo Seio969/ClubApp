@@ -21,11 +21,15 @@ from PySide6.QtWidgets import (
 
 
 class MemberDialog(QDialog):
-    """Modal form for entering a new member's data."""
+    """Modal form for entering a new member's data, or editing an existing one.
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    Pass `initial_data` (same shape as `get_data()`'s return value) to open
+    the dialog pre-filled in "edit" mode; omit it for "new member" mode.
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None, initial_data: Optional[dict[str, Any]] = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Nuevo miembro")
+        self.setWindowTitle("Editar miembro" if initial_data is not None else "Nuevo miembro")
         self.setModal(True)
         self.setMinimumWidth(360)
 
@@ -63,6 +67,29 @@ class MemberDialog(QDialog):
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+        if initial_data is not None:
+            self._populate(initial_data)
+
+    def _populate(self, data: dict[str, Any]) -> None:
+        """Fill the form fields from `data` (edit mode)."""
+        self.numero_socio_input.setText(str(data.get("numero_socio") or ""))
+        self.nombre_input.setText(str(data.get("nombre") or ""))
+        self.apellidos_input.setText(str(data.get("apellidos") or ""))
+        self.telefono_input.setText(str(data.get("telefono") or ""))
+        self.email_input.setText(str(data.get("email") or ""))
+
+        fecha_alta = data.get("fecha_alta")
+        if isinstance(fecha_alta, datetime.date):
+            self.fecha_alta_input.setDate(QDate(fecha_alta.year, fecha_alta.month, fecha_alta.day))
+
+        estado = data.get("estado")
+        if estado:
+            idx = self.estado_input.findText(str(estado))
+            if idx >= 0:
+                self.estado_input.setCurrentIndex(idx)
+
+        self.observaciones_input.setPlainText(str(data.get("observaciones") or ""))
 
     def _on_accept(self) -> None:
         if (
