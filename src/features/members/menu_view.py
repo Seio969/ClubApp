@@ -428,9 +428,14 @@ class MembersMenuView(QWidget, TableSortMixin):
             logger.exception("MembersMenuView._populate_db_views: failed - %s", exc)
 
     def load_table_view(self, table_name: str) -> None:
-        """Load the named table into the results table by querying the DB.
+        """Load the named table into the results table.
 
-        This calls the service.fetch_view which validates/dispatches the view
+        The members table itself ("socios") goes through the real,
+        members-owned query (MembersMenuService.search_members with no
+        filter) rather than the generic ViewRegistry dump - see PLAN.md
+        2.3. Every other registered view (still reachable via the "Vistas"
+        dropdown until PLAN.md 2.16 retires it) keeps going through
+        service.fetch_view, which validates/dispatches the view
         (table/sql/callable) and populates the model.
         """
         logger.info("Cargando vista: %s", table_name)
@@ -439,7 +444,10 @@ class MembersMenuView(QWidget, TableSortMixin):
 
         # remember which view is currently loaded so refresh can re-run it
         self._current_view_name = table_name
-        added = self._service.fetch_view(table_name, self.model, limit=limit)
+        if table_name == "socios":
+            added = self._service.search_members("", self.model, limit=limit)
+        else:
+            added = self._service.fetch_view(table_name, self.model, limit=limit)
         logger.info("Cargadas %d filas desde vista '%s' con límite %s", added, table_name, limit)
 
         # Refresh filters menu to match new columns

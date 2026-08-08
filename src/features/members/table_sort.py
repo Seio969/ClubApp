@@ -7,10 +7,10 @@ mixin avoids threading a dozen callbacks through a standalone helper.
 
 from __future__ import annotations
 
-import unicodedata
-
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItem
+
+from utils.text import normalize_for_match
 
 
 class TableSortMixin:
@@ -30,20 +30,12 @@ class TableSortMixin:
         """Return a lowercase, diacritic-free version of the string for sorting.
 
         This converts characters like 'á' -> 'a', 'ñ' -> 'n', etc., and
-        performs a casefold to make comparisons case-insensitive.
+        performs a casefold to make comparisons case-insensitive. Delegates
+        to utils.text.normalize_for_match, which MembersMenuService's DB
+        search also uses, so sorting and searching stay accent-insensitive
+        the same way.
         """
-        if value is None:
-            return ""
-        try:
-            # Ensure we are working with a string
-            s = str(value)
-            # Normalize to NFKD and drop combining marks (diacritics)
-            nkfd = unicodedata.normalize("NFKD", s)
-            stripped = "".join(ch for ch in nkfd if not unicodedata.combining(ch))
-            # Use casefold for aggressive case-insensitive compare
-            return stripped.casefold().strip()
-        except Exception:
-            return str(value).casefold() if value is not None else ""
+        return normalize_for_match(value)
 
     def _make_sort_key(self, raw: str):
         """Create a sort key that prefers numeric sorting when values look numeric.
