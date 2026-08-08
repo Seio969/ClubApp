@@ -122,14 +122,22 @@ class MembersToolBar(QToolBar):
         self.service.edit_member(indices, model_getter)
 
     def on_delete_member(self) -> None:
-        """Handle delete member action."""
+        """Handle delete member action (deactivates the member, never a physical delete)."""
         if self.table is None:
             self.service.delete_members([])
             return
         sel = self.table.selectionModel().selectedRows()
         indices = [s.row() for s in sel] if sel else []
-        rows_to_remove = self.service.delete_members(indices)
-        # Perform actual deletion on the model
+
+        def model_getter(row: int, col: int):
+            if self.model is None:
+                return None
+            return self.model.item(row, col)
+
+        rows_to_remove = self.service.delete_members(indices, model_getter)
+        # Rows returned here were already deactivated (estado="inactivo") in
+        # the database; remove them from the in-memory model for immediate
+        # feedback.
         if self.model is not None and rows_to_remove:
             for r in rows_to_remove:
                 self.model.removeRow(r)
