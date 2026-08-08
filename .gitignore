@@ -11,3 +11,6 @@ wheels/
  
 # Data directory (database and runtime files)
 /data/
+
+# Claude Code local/personal settings (not shared across the team)
+.claude/settings.local.json
