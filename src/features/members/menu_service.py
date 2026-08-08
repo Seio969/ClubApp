@@ -96,6 +96,8 @@ class MembersMenuService:
         model.setHorizontalHeaderLabels([str(k) for k in keys])
         for row in rows:
             items = [QStandardItem("") if v is None else QStandardItem(str(v)) for v in row]
+            for item in items:
+                item.setEditable(False)
             model.appendRow(items)
 
     def search_members(self, text: str, model: Any, limit: Optional[int] = None) -> int:
