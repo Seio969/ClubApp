@@ -27,6 +27,7 @@ from PySide6.QtCore import Qt
 
 from .metodos_pago_view import show_metodos_pago_view
 from .reglas_cobro_view import show_reglas_cobro_view
+from .reset_view import show_reset_view
 from ui.styles import SETTINGS_MENU_STYLESHEET
 from utils.logger import get_logger
 
@@ -73,6 +74,7 @@ class SettingsView(QWidget):
         sections = [
             ("💳 Métodos de pago", self.on_open_metodos_pago),
             ("📋 Reglas de cobro", self.on_open_reglas_cobro),
+            ("🗑️ Restablecer base de datos", self.on_open_reset),
         ]
         columns = 2
         for idx, (label, handler) in enumerate(sections):
@@ -98,6 +100,10 @@ class SettingsView(QWidget):
     def on_open_reglas_cobro(self) -> None:
         if self.main_window is not None:
             show_reglas_cobro_view(self.main_window)
+
+    def on_open_reset(self) -> None:
+        if self.main_window is not None:
+            show_reset_view(self.main_window)
 
 
 def show_settings_view(main_window) -> None:
