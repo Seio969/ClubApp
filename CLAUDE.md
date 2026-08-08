@@ -88,12 +88,10 @@ Computes `BASE_DIR` as two levels up from this file (i.e. the repo root, robustl
 
 ### `src/main.py`
 ```python
-DB_PATH = DATA_DIR / "club_manager.db"
-if not DB_PATH.exists():
-    init_db()
+init_db()
 ```
-`DB_PATH` is built from `config.DATA_DIR` (the same absolute, `BASE_DIR`-relative path `session.py`'s engine uses), so this check always agrees with where the SQLAlchemy engine actually points regardless of the process's current working directory. Don't reintroduce a fresh `cwd`-relative `Path("data/...")` here.
-`run_main_window()` from `ui/main_window.py` is only invoked under `if __name__ == "__main__"`, so importing `main.py` elsewhere is side-effect-light except for the `init_db()` check above, which runs unconditionally at import time.
+Calls `init_db()` **unconditionally** on every import, not gated behind a `DB_PATH.exists()` check. **Decided (durable):** an earlier version only called it when `data/club_manager.db` was missing, which meant `_add_missing_columns()` (see `database/init_db.py` below) never ran for anyone who already had a DB file — a column added to an existing model (e.g. `Socio.es_titular`, PLAN.md 2.17) would silently never get applied, surfacing as a `sqlite3.OperationalError: no such column` crash on first query instead of at startup. `create_all()`, `_add_missing_columns()` and `seed_all()` are all individually documented as safe/idempotent to call on every startup, so there's no cost to always running the whole thing. Don't reintroduce an existence-check gate here.
+`run_main_window()` from `ui/main_window.py` is only invoked under `if __name__ == "__main__"`, so importing `main.py` elsewhere is side-effect-light except for the `init_db()` call above, which runs unconditionally at import time.
 
 ### `src/database/models.py`
 Declares `Base = declarative_base()` and seven ORM classes. All monetary columns are `Numeric(10, 2)`.
