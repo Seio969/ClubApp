@@ -21,6 +21,9 @@ Dependencies are managed with **uv** (`uv.lock` is present; no `requirements.txt
 
 There is no linter, formatter, or type-checker configured anywhere in this repo (no `ruff`, `mypy`, etc. in `pyproject.toml`). `pytest` is present as a dev dependency; see `tests/` below for what's actually covered — most of the app (Qt views, most services) still has no tests.
 
+### Creating/merging GitHub pull requests
+The `gh` CLI is **not installed** in this dev environment — don't shell out to `gh pr create`/`gh pr merge`, it will fail with "command not found." Use the GitHub REST API directly instead (`curl`/PowerShell `Invoke-RestMethod`), authenticated with the `GH_TOKEN` environment variable (a fine-grained PAT scoped to this repo, set as a persistent user env var — see `setx` on Windows). If `GH_TOKEN` isn't set in the environment, don't try to open/merge a PR yourself — tell the user and let them do it manually (e.g. via VS Code's GitHub Pull Requests extension) instead of guessing at auth.
+
 ### Import path convention
 
 Every module uses absolute imports rooted at `src/` (e.g. `from database.session import engine`, `from features.members.menu_view import show_members_view`, `from utils.logger import get_logger`) — never `from src....`. This only resolves when `src/` itself is on `sys.path`, which happens automatically because Python prepends the running script's own directory. In practice this means:
