@@ -40,36 +40,25 @@ This document lists, by category, everything that's pending and proposes an exec
 - [x] Billing rules (`ReglaCobro`) full CRUD — multiple named rules supported, soft-deactivation only (2.7)
 - [x] Database reset action — full wipe + scoped reset, type-to-confirm safety flow (2.15)
 
+**Completed** (branch `feat/transactions-module`):
+- [x] Transactions module (2.4) — `features/transactions/` package (service/dialog/toolbar/view), both decided entry points wired (Members "Registrar" shortcut + standalone `Transacciones` main-menu screen), integrity validation (refund-availability, exact-duplicate rejection), minimal período quick-create. See `CLAUDE.md`'s `features/transactions/` section for the full design.
+- [ ] Balance recalculation (originally 2.4's build step 7) — deliberately **not** included; see 2.5 below.
+
 Everything below already has an ORM model declared in `models.py` but **zero UI and zero service logic**, except where noted above:
 
 ### 2.2 Deactivating members (not physical deletion)
 - Deactivation and its confirmation dialog are both done (see Completed block above).
 - **Still pending**: estado-aware filtering/display — today a deactivated member still shows up (now correctly marked `inactivo`) on the next reload since nothing filters by `estado` yet.
 
-### 2.4 Transactions module (charges / payments / refunds)
-No `features/transactions/` exists yet.
-
-**Decided — navigation model (both entry points, not either/or):**
-- **Member-scoped shortcut**: the existing "Registrar" button in the Members toolbar (`on_register_movements`, currently a no-op logging the selected indices) opens the transaction dialog with the socio **pre-filled/locked** from the row(s) selected in the Members table. This is the fast path for "this member just paid."
-- **Standalone screen**: a new `Transacciones` entry on the main menu, its own `features/transactions/` package (view/toolbar/dialog/service, same shape as `features/members/`), for club-wide browsing/filtering by fecha, tipo, or estado — this is the README's "Filtrar transacciones por fecha, tipo o estado" requirement (2.5 in Requisitos Funcionales), which a member-scoped-only flow can't satisfy. Reuses the shared top-bar/toolbar/table composition proposed in `UI_PROPOSAL.md` §2 (Structure) / §3 (mockups) rather than being built from scratch.
-- Both entry points share **one** `TransactionDialog` and **one** `TransactionsService` — the Members-toolbar path just pre-populates the socio field and skips the picker; nothing about validation/persistence differs between the two.
-
-**Build steps:**
-1. Scaffold `features/transactions/` (view, toolbar, dialog, service) mirroring `features/members/`'s structure.
-2. `TransactionDialog`: socio picker (search/select — locked/pre-filled when opened from Members' "Registrar"), tipo (cargo/pago/reembolso), monto, método de pago (dropdown sourced from `metodos_pago`, see 2.7), periodo selector (`periodo` table), referencia.
-3. `TransactionsService.add_transaction(...)` via `get_session()`, following the pattern already used in `MembersService.add_member`.
-4. Integrity validation: prevent a refund without a prior payment, prevent duplicate transactions (README "Data Integrity" requirement) — enforced in the service, so both entry points get it automatically.
-5. Wire the Members toolbar's `on_register_movements` to open `TransactionDialog` pre-filled with the selected row's `numero_socio`, instead of logging indices.
-6. Add the `Transacciones` main-menu button + screen: shared top-bar/toolbar/table composition, default-filtered to the currently open período, with fecha/tipo/estado filters.
-7. Trigger balance recalculation (2.5) after a successful save from either entry point.
-
 ### 2.5 Balance calculation and carry-over (`SaldoSocios`)
 - There's no service that computes `saldo_actual` from `saldo_anterior + cargos - pagos` (or similar), nor one that carries a balance from one period to the next when periods are closed/opened.
 - This calculation should be triggered automatically after every transaction (README requirement "Automatic balance calculation"), most likely as part of the `Transaccion` save logic, not as a manual step.
+- **Decided**: intentionally not built alongside the transactions module (2.4) even though it was originally scoped as that module's last build step — the exact formula (and any carry-over/penalización/descuento nuance) is likely already defined in the legacy `.xlsm` this app is replacing (see 2.15b). Building a guessed version now risked rework once that workbook is analyzed. Do this once 2.15b's analysis is done, not before.
 
 ### 2.6 Period management (`Periodo`)
 - No screen to open/close/edit accounting periods. `estado` (open/closed) exists on the model but nothing changes it.
 - No logic preventing transactions from being registered against a closed period.
+- A minimal `TransactionsService.create_periodo_rapido(nombre, fecha_inicio)` now exists (added alongside 2.4) so the transaction dialog isn't blocked on this — see `CLAUDE.md`'s `features/transactions/service.py` section. It is **not** a substitute for this item: no open/close, no editing, no listing/management screen.
 
 ### 2.8 Reports
 - Nothing implemented: no annual per-member summary, no overall financial view, no Excel/PDF export.
@@ -143,8 +132,8 @@ No `features/transactions/` exists yet.
 2. **Minimal testing infrastructure** — `pytest` + first tests over what already exists and persists (`MembersService.add_member`, `ViewRegistry`, sort functions). This provides a safety net before touching more business logic.
 3. **Complete the Members CRUD** — real search (2.3), editing (2.1), logical deactivation with confirmation (2.2, 4.3), audit logging (2.12) on every write operation, and retiring the generic "Vistas" table-switcher in favor of a proper members-only load path (2.16). This fully closes out the one partially-built domain before opening a new one.
 4. **Seed data + Settings** — fixed payment methods and billing rules (2.7), since the transactions module depends on payment methods existing. Add the **database reset action** (2.15) to the same Settings screen while it's being built.
-5. **Transactions module** (2.4) — the next most important functional domain and the one that delivers the most business value.
-6. **Balance calculation and Periods** (2.5, 2.6) — depends on transactions existing.
+5. **Transactions module** (2.4) — done, except balance recalculation (see next item).
+6. **Balance calculation and Periods** (2.5, 2.6) — depends on transactions existing (done), but balance calculation is now also gated on 2.15b's `.xlsm` analysis (decided when 2.4 was built — see 2.5). A full Periods management screen is still unbuilt.
 7. **Business-standard test scenarios** (3.8) — once the rules they encode (2.4, 2.5, 2.6, 2.7) actually exist, write the acceptance-style scenarios that pin down correct behavior for late payments, penalties, discounts, rejected refunds, and balance carry-over.
 8. **Reports + export** (2.8), then **charts/statistics** (2.9).
 9. **Backups** (2.10) and **import** (2.11) — more independent features, can be tackled in parallel or at the end.
@@ -162,3 +151,5 @@ All previously open questions have been answered by the user; nothing outstandin
 - **Postgres migration / encryption timeline**: long-term goals, not scheduled now — keep `create_all`/SQLite until the functional domain is mature. See 2.13, 2.14.
 - **UI redesign direction**: no specific reference from the user — Claude proposed a design (palette, spacing, icons) in [`UI_PROPOSAL.md`](UI_PROPOSAL.md), pending approval before wide rollout. See 4.3.
 - **Transactions navigation model**: both entry points, not either/or — the Members toolbar's "Registrar" button stays as a socio-pre-filled shortcut, *and* a standalone `Transacciones` screen is added to the main menu for club-wide browsing/filtering (README's fecha/tipo/estado filter requirement needs the standalone screen; the quick shortcut alone couldn't satisfy it). Both share one dialog and one service. See 2.4.
+- **Transaction integrity rules**: a reembolso can't exceed (sum of pago − sum of already-refunded reembolso) scoped to the same numero_socio+período; an exact-duplicate Transaccion (same numero_socio/tipo/monto/id_periodo/id_metodo/fecha) is rejected. See `CLAUDE.md`'s `features/transactions/service.py` section.
+- **Balance recalculation sequencing**: deferred until the legacy `.xlsm` (2.15b) is analyzed, rather than guessing at the formula while building the transactions module. See 2.5.
