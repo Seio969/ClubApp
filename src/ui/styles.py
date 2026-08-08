@@ -89,6 +89,42 @@ QPushButton { min-width: 90px; min-height: 28px; }
 }
 """
 
+# Settings view stylesheet - mirrors MEMBERS_MENU_STYLESHEET's look (paper
+# background, back button, table) under its own #settingsMenu root so the
+# two screens read as one product until the shared token layer proposed in
+# UI_PROPOSAL.md lands.
+SETTINGS_MENU_STYLESHEET: Final[str] = r"""
+#settingsMenu { background: #fafafa; }
+#topBar { background: transparent; }
+QPushButton { min-width: 90px; min-height: 28px; }
+#backButton {
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-weight: bold;
+    color: #333;
+}
+#backButton:hover {
+    background-color: #e0e0e0;
+    border-color: #999;
+}
+#backButton:pressed {
+    background-color: #d0d0d0;
+}
+#screenTitle { font-weight: 600; font-size: 14px; }
+#resultsTable {
+    background: #ffffff;
+    color: #000000;
+    alternate-background-color: #f6f6f6;
+}
+#resultsTable QTableView::item {
+    color: #000000;
+}
+#resultsTable QHeaderView::section {
+    color: #000000;
+}
+"""
+
 # Small per-widget styles that were previously set inline
 TITLE_STYLE: Final[str] = "font-size: 35px; font-weight: 700;"
 BUTTON_FONT_STYLE: Final[str] = "font-size: 20px;"

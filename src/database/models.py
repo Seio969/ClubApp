@@ -27,6 +27,10 @@ class MetodoPago(Base):
     __tablename__ = "metodos_pago"
     id_metodo = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, nullable=False, unique=True)
+    # activo/inactivo, same soft-deactivation pattern as Socio.estado - a
+    # payment method is never physically deleted, only deactivated, so
+    # transactions that already reference it keep a meaningful name.
+    estado = Column(String, default="activo")
 
     transacciones = relationship("Transaccion", back_populates="metodo")
 
@@ -51,6 +55,10 @@ class ReglaCobro(Base):
     plazo_pago = Column(Integer)
     penalizacion = Column(Numeric(10, 2))
     descuento = Column(Numeric(10, 2))
+    # activo/inactivo - same soft-deactivation pattern as Socio.estado and
+    # MetodoPago.estado; a rule is never physically deleted so a
+    # transaction/period that already referenced it keeps a meaningful name.
+    estado = Column(String, default="activo")
 
 
 class Transaccion(Base):
