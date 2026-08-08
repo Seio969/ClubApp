@@ -61,9 +61,8 @@ No `features/transactions/` exists yet.
 - No logic preventing transactions from being registered against a closed period.
 
 ### 2.7 Billing rules (`ReglaCobro`) and payment methods (`MetodoPago`)
-- `ReglaCobro` (monthly fee, payment deadline, penalty, discount) has NO UI entry point and no read/write path from code at all — an orphaned table today.
-- `metodos_pago` has no seed data anywhere (`init_db.py` only creates tables). The README defines 5 fixed payment methods (REMESA, EFECTIVO, TRANSFERENCIA, TRANSFERENCIA/EFECTIVO, INACTIVO) that should be inserted as a seeding step.
-- **Pending**: a "Settings" screen (Ajustes — today a no-op button in `main_menu_widget.py`) for CRUD on billing rules and payment methods, plus a seed-data script/step.
+**Done** (branch `feat/seed-data-and-settings`): `metodos_pago` seeding (the 5 fixed README methods, idempotent, run from `init_db()`); `⚙️ Ajustes` now opens a real Settings hub (`features/settings/menu_view.py`) with section buttons rather than being a no-op; the hub's "💳 Métodos de pago" section (`features/settings/metodos_pago_view.py`) has full CRUD — add/rename/activate-deactivate custom methods, the 5 fixed methods can be deactivated but never renamed/deleted (soft-deactivation via a new `MetodoPago.estado` column, same pattern as `Socio`).
+- **Still pending**: `ReglaCobro` (monthly fee, payment deadline, penalty, discount) still has NO UI entry point and no read/write path — an orphaned table. The hub's "📋 Reglas de cobro" button is currently a placeholder (shows an info box, same `not_implemented` pattern as `menu_bar.py`'s stubbed File/Edit actions) — needs its own `MetodosPagoService`-shaped service/view/toolbar/dialog set (`reglas_cobro_*.py` alongside the `metodos_pago_*.py` files) wired into that button.
 
 ### 2.8 Reports
 - Nothing implemented: no annual per-member summary, no overall financial view, no Excel/PDF export.
