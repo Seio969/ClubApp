@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 from .toolbar_service import MembersService
 from .dialog import MemberDialog
+from features.transactions.dialog import TransactionDialog
+from features.transactions.service import TransactionsService
 from utils.logger import get_logger
 logger = get_logger(__name__)
 
@@ -24,7 +26,12 @@ logger = get_logger(__name__)
 class MembersToolBar(QToolBar):
     """Toolbar for members view with CRUD and utility actions."""
 
-    def __init__(self, parent: Optional[QWidget] = None, service: Optional[MembersService] = None) -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        service: Optional[MembersService] = None,
+        transactions_service: Optional[TransactionsService] = None,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("membersToolBar")
         self.setMovable(False)
@@ -33,8 +40,9 @@ class MembersToolBar(QToolBar):
         self.table: Optional[QTableView] = None
         self.model: Optional[QStandardItemModel] = None
 
-        # Behaviour service (non-UI logic)
+        # Behaviour services (non-UI logic)
         self.service: MembersService = service or MembersService()
+        self.transactions_service: TransactionsService = transactions_service or TransactionsService()
 
         self._setup_actions()
 
@@ -248,14 +256,72 @@ class MembersToolBar(QToolBar):
         self.service.export_members(rows, destination=None)
 
     def on_register_movements(self) -> None:
-        """Handle register movements action (cargos / pagos / devoluciones).
+        """Open TransactionDialog to register a cargo/pago/reembolso.
 
-        Currently a placeholder that delegates to the service layer. The
-        service will implement detailed dialogs and persistence in the future.
+        This is the member-scoped shortcut decided in PLAN.md 2.4 (the
+        "both entry points" navigation model): with exactly one member row
+        selected, the dialog opens pre-filled and locked to that member
+        (`preset_socio`); with none selected, it opens with the socio field
+        open for search/select instead. Selecting more than one row is
+        refused - same single-row-only rule as on_edit_member - since a
+        movement is registered against one socio at a time.
         """
-        if self.table is None:
-            self.service.register_transactions([])
+        preset_socio = None
+        if self.table is not None and self.model is not None:
+            sel = self.table.selectionModel().selectedRows()
+            if len(sel) > 1:
+                QMessageBox.information(
+                    self, "Registrar movimiento", "Seleccione un único miembro, o ninguno para elegir el socio en el diálogo."
+                )
+                return
+            if len(sel) == 1:
+                row = sel[0].row()
+                preset_socio = self._resolve_preset_socio(row)
+                if preset_socio is None:
+                    QMessageBox.critical(self, "Error", "No se pudo resolver el socio seleccionado.")
+                    return
+
+        dialog = TransactionDialog(self, service=self.transactions_service, preset_socio=preset_socio)
+        if dialog.exec() != TransactionDialog.DialogCode.Accepted:
             return
-        sel = self.table.selectionModel().selectedRows()
-        indices = [s.row() for s in sel] if sel else []
-        self.service.register_transactions(indices)
+
+        data = dialog.get_data()
+        error = self.transactions_service.validate_transaction(data)
+        if error:
+            QMessageBox.warning(self, "Movimiento no válido", error)
+            return
+
+        new_id = self.transactions_service.add_transaction(data)
+        if new_id is None:
+            QMessageBox.critical(
+                self, "Error", "No se pudo registrar el movimiento. Revise los datos e inténtelo de nuevo."
+            )
+            return
+        QMessageBox.information(self, "Movimiento registrado", "El movimiento se registró correctamente.")
+
+    def _resolve_preset_socio(self, row: int) -> Optional[dict]:
+        """Read the Members table's columns 0-3 for `row` into a preset_socio
+        dict shaped like TransactionsService.list_socios_activos()'s rows.
+
+        Column order matches MembersMenuService._SOCIO_COLUMNS: id_socio(0),
+        numero_socio(1), nombre(2), apellidos(3).
+        """
+        if self.model is None:
+            return None
+        id_item = self.model.item(row, 0)
+        numero_item = self.model.item(row, 1)
+        nombre_item = self.model.item(row, 2)
+        apellidos_item = self.model.item(row, 3)
+        try:
+            id_socio = int(id_item.text()) if id_item is not None else None
+        except (ValueError, AttributeError):
+            id_socio = None
+        numero_socio = numero_item.text() if numero_item is not None else None
+        if id_socio is None or not numero_socio:
+            return None
+        return {
+            "id_socio": id_socio,
+            "numero_socio": numero_socio,
+            "nombre": nombre_item.text() if nombre_item is not None else "",
+            "apellidos": apellidos_item.text() if apellidos_item is not None else "",
+        }

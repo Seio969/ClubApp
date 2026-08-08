@@ -40,36 +40,25 @@ This document lists, by category, everything that's pending and proposes an exec
 - [x] Billing rules (`ReglaCobro`) full CRUD — multiple named rules supported, soft-deactivation only (2.7)
 - [x] Database reset action — full wipe + scoped reset, type-to-confirm safety flow (2.15)
 
+**Completed** (branch `feat/transactions-module`):
+- [x] Transactions module (2.4) — `features/transactions/` package (service/dialog/toolbar/view), both decided entry points wired (Members "Registrar" shortcut + standalone `Transacciones` main-menu screen), integrity validation (refund-availability, exact-duplicate rejection), minimal período quick-create. See `CLAUDE.md`'s `features/transactions/` section for the full design.
+- [ ] Balance recalculation (originally 2.4's build step 7) — deliberately **not** included; see 2.5 below.
+
 Everything below already has an ORM model declared in `models.py` but **zero UI and zero service logic**, except where noted above:
 
 ### 2.2 Deactivating members (not physical deletion)
 - Deactivation and its confirmation dialog are both done (see Completed block above).
 - **Still pending**: estado-aware filtering/display — today a deactivated member still shows up (now correctly marked `inactivo`) on the next reload since nothing filters by `estado` yet.
 
-### 2.4 Transactions module (charges / payments / refunds)
-No `features/transactions/` exists yet.
-
-**Decided — navigation model (both entry points, not either/or):**
-- **Member-scoped shortcut**: the existing "Registrar" button in the Members toolbar (`on_register_movements`, currently a no-op logging the selected indices) opens the transaction dialog with the socio **pre-filled/locked** from the row(s) selected in the Members table. This is the fast path for "this member just paid."
-- **Standalone screen**: a new `Transacciones` entry on the main menu, its own `features/transactions/` package (view/toolbar/dialog/service, same shape as `features/members/`), for club-wide browsing/filtering by fecha, tipo, or estado — this is the README's "Filtrar transacciones por fecha, tipo o estado" requirement (2.5 in Requisitos Funcionales), which a member-scoped-only flow can't satisfy. Reuses the shared top-bar/toolbar/table composition proposed in `UI_PROPOSAL.md` §2 (Structure) / §3 (mockups) rather than being built from scratch.
-- Both entry points share **one** `TransactionDialog` and **one** `TransactionsService` — the Members-toolbar path just pre-populates the socio field and skips the picker; nothing about validation/persistence differs between the two.
-
-**Build steps:**
-1. Scaffold `features/transactions/` (view, toolbar, dialog, service) mirroring `features/members/`'s structure.
-2. `TransactionDialog`: socio picker (search/select — locked/pre-filled when opened from Members' "Registrar"), tipo (cargo/pago/reembolso), monto, método de pago (dropdown sourced from `metodos_pago`, see 2.7), periodo selector (`periodo` table), referencia.
-3. `TransactionsService.add_transaction(...)` via `get_session()`, following the pattern already used in `MembersService.add_member`.
-4. Integrity validation: prevent a refund without a prior payment, prevent duplicate transactions (README "Data Integrity" requirement) — enforced in the service, so both entry points get it automatically.
-5. Wire the Members toolbar's `on_register_movements` to open `TransactionDialog` pre-filled with the selected row's `numero_socio`, instead of logging indices.
-6. Add the `Transacciones` main-menu button + screen: shared top-bar/toolbar/table composition, default-filtered to the currently open período, with fecha/tipo/estado filters.
-7. Trigger balance recalculation (2.5) after a successful save from either entry point.
-
 ### 2.5 Balance calculation and carry-over (`SaldoSocios`)
 - There's no service that computes `saldo_actual` from `saldo_anterior + cargos - pagos` (or similar), nor one that carries a balance from one period to the next when periods are closed/opened.
 - This calculation should be triggered automatically after every transaction (README requirement "Automatic balance calculation"), most likely as part of the `Transaccion` save logic, not as a manual step.
+- **Decided**: intentionally not built alongside the transactions module (2.4) even though it was originally scoped as that module's last build step — the exact formula (and any carry-over/penalización/descuento nuance) is likely already defined in the legacy `.xlsm` this app is replacing (see 2.15b). Building a guessed version now risked rework once that workbook is analyzed. Do this once 2.15b's analysis is done, not before.
 
 ### 2.6 Period management (`Periodo`)
 - No screen to open/close/edit accounting periods. `estado` (open/closed) exists on the model but nothing changes it.
 - No logic preventing transactions from being registered against a closed period.
+- A minimal `TransactionsService.create_periodo_rapido(nombre, fecha_inicio)` now exists (added alongside 2.4) so the transaction dialog isn't blocked on this — see `CLAUDE.md`'s `features/transactions/service.py` section. It is **not** a substitute for this item: no open/close, no editing, no listing/management screen.
 
 ### 2.8 Reports
 - Nothing implemented: no annual per-member summary, no overall financial view, no Excel/PDF export.
@@ -108,6 +97,23 @@ No `features/transactions/` exists yet.
 - **Decided (workflow):** analyze and document first, agree on the implementation mapping, *then* implement inside the relevant `features/<domain>/` package — not a direct/blind port of VBA into Python.
 - Depends on: the user attaching the `.xlsm` file (not yet done as of this entry).
 
+### 2.17 "Titular" (primary holder) per `numero_socio`
+- **New request**, surfaced while using the transactions module (`feat/transactions-module`): `numero_socio` is a shared family/household identifier (see `models.py`'s note — deliberately not unique per `Socio` row), and when registering/browsing transactions it's confusing that every family member sharing a número shows up as an equally-valid, undistinguished option. The request is to designate exactly one "titular" (primary holder) per `numero_socio`.
+- **Not started** — no schema change, no service/UI work done yet. This is a separate chunk from the transactions module and should get its own branch/PR (stacked on `feat/transactions-module` until that's merged, since it needs `TransactionDialog`/`TransactionsService` to exist).
+- **Decided (durable) — captured from user Q&A before deferring implementation:**
+  - **Data model**: add `Socio.es_titular` (boolean, default `False`). Setting one Socio as titular **auto-unsets** any other Socio row sharing that `numero_socio` — never two `True` at once for the same número. Needs the usual `_add_missing_columns()` stopgap in `database/init_db.py` (same pattern as `MetodoPago.estado`/`ReglaCobro.estado`), since it's a column added after `socios` already exists.
+  - **Swap confirmation**: when a save would replace an existing titular with a different one, the UI must warn and ask for confirmation before proceeding (e.g. "¿Reemplazar a X como titular del número N por Y?") — not a silent swap.
+  - **Transaction picker scope**: both the `TransactionDialog` socio picker and the standalone Transacciones screen's Socio column/search should default to showing/matching the **titular** per número — but the picker must still allow registering a transaction under a *different* (non-titular) family member when needed; it shouldn't hard-block that. There's also an open ask to be able to see that a *different* person was the titular in the past (a history/audit view) — the existing `Log`/`record_log` mechanism can capture titular-change events (`accion="cambio_titular"`, matching the pattern other services already use), but an actual UI to browse that history doesn't exist yet (ties into 2.12's still-open "logs" screen decision) — recording the log rows is in scope for this item, a dedicated history viewer is not, unless the user asks for it when this chunk is picked up.
+  - **New `numero_socio` requires a titular immediately**: when creating the *first* `Socio` row for a `numero_socio` that doesn't exist yet in the DB, that row must become the titular — there's no valid "unset" state for a brand-new número (unlike existing ones, see below).
+  - **Existing data**: no backfill/migration for `numero_socio` groups that predate this feature — they're left with no titular, and **blocked** from being used in the transaction dialog's picker until an admin explicitly edits a member and marks them titular via Members/Ajustes.
+- **Build sketch for whoever picks this up** (not yet validated against the actual code, just a starting sketch from the design conversation):
+  1. `models.py`: `Socio.es_titular` column; `init_db.py`'s `_add_missing_columns()` gets the matching `ALTER TABLE`.
+  2. `MembersService`: `get_titular(numero_socio) -> Optional[dict]`; `add_member`/`update_member` gain the auto-unset-other-titular + audit-log logic, plus the new-número-requires-titular rule (likely enforced/auto-corrected server-side rather than only in the dialog).
+  3. `MemberDialog`: add an "Es titular" checkbox; `MembersToolBar.on_add_member`/`on_edit_member` check `get_titular()` before saving and show the swap-confirmation `QMessageBox` when needed (mirrors `_confirm_deactivation`'s existing shape).
+  4. `TransactionsService.list_socios_activos()`: include `es_titular` per row so the dialog can default its visible list to titulares while still resolving a searched-for non-titular pick.
+  5. `TransactionDialog`: default the socio combo to titulares only, but keep search (via `QCompleter`) able to find and select any active socio, dynamically adding a non-titular pick as a combo item once chosen.
+  6. `TransactionsService.list_transactions()`: prefer the titular's name (not an arbitrary first-by-id pick) when building the `numero_socio -> display name` map.
+
 ---
 
 ## 3. Technical debt / infrastructure
@@ -132,8 +138,9 @@ No `features/transactions/` exists yet.
 ## 4. Pending UI / UX
 
 1. **File/Edit menu** in `menu_bar.py` — New/Open/Save and all of Edit (Undo/Redo/Cut/Copy/Paste) are deliberate `not_implemented` stubs. Confirm with the user which of these make real sense in a desktop management app (Save/Open probably don't apply to an app backed by a persistent SQLite DB; Undo/Redo could have real value for member-editing operations).
-2. **Transactions, Periods, Reports screens** — don't exist yet, not even as a skeleton (`features/transactions/`, `features/periods/`, `features/reports/` haven't been created). Only `features/members/` and `features/settings/` follow the per-domain folder pattern documented in `CLAUDE.md`. For Transacciones specifically, see 2.4's decided navigation model: a member-scoped shortcut via Members' existing "Registrar" button *and* a standalone main-menu screen, not one or the other.
+2. **Periods, Reports screens** — don't exist yet, not even as a skeleton (`features/periods/`, `features/reports/` haven't been created). `features/members/`, `features/settings/`, and now `features/transactions/` (2.4, done) follow the per-domain folder pattern documented in `CLAUDE.md`.
 3. **Overall visual/UI polish.** Bug 1.2 covers one specific rendering defect (the broken QSS header-color rule), but there's no wider design work planned yet: today the app is three hand-written QSS strings (`MAIN_MENU_STYLESHEET`, `MEMBERS_MENU_STYLESHEET`, `SETTINGS_MENU_STYLESHEET` in `styles.py` — the latter two already near-duplicates of each other) plus Qt's built-in `QStyle.SP_*` stock icons (no custom icon set, no consistent spacing/typography system, no light/dark theme, no design tokens). **Decided**: no specific reference given — Claude proposed a clean, modern look (palette, spacing, icons) for approval before wider rollout; see [`UI_PROPOSAL.md`](UI_PROPOSAL.md) for the full audit and design direction (token layer, unified ledger palette, `qtawesome` icons, extracted shared table/toolbar composition for future screens).
+4. **Table row selection doesn't survive navigating away and back.** Reported by the user: selecting a row in a grid (Members, Transacciones, Métodos de pago, Reglas de cobro), then clicking outside the table or navigating away (e.g. "Volver" back to the main menu) and returning to the same screen, loses the selection — the row shows unselected again instead of staying selected. Root cause is almost certainly that every screen's `load_table_view()`/`refresh_table()` rebuilds the `QStandardItemModel` from scratch (`removeRows` + `appendRow` for every row), which discards the `QItemSelectionModel`'s selection since it's keyed to model indices that no longer exist after rebuild — same class of problem `TableSortMixin` already solves for sort state, just not yet done for selection. Fix should remember the selected row's stable id (e.g. `id_socio`/`id_transaccion`/`id_metodo`/`id_regla`, whichever column 0 holds) before a reload and re-select the matching row after repopulating, across all four grid screens.
 
 ---
 
@@ -143,13 +150,14 @@ No `features/transactions/` exists yet.
 2. **Minimal testing infrastructure** — `pytest` + first tests over what already exists and persists (`MembersService.add_member`, `ViewRegistry`, sort functions). This provides a safety net before touching more business logic.
 3. **Complete the Members CRUD** — real search (2.3), editing (2.1), logical deactivation with confirmation (2.2, 4.3), audit logging (2.12) on every write operation, and retiring the generic "Vistas" table-switcher in favor of a proper members-only load path (2.16). This fully closes out the one partially-built domain before opening a new one.
 4. **Seed data + Settings** — fixed payment methods and billing rules (2.7), since the transactions module depends on payment methods existing. Add the **database reset action** (2.15) to the same Settings screen while it's being built.
-5. **Transactions module** (2.4) — the next most important functional domain and the one that delivers the most business value.
-6. **Balance calculation and Periods** (2.5, 2.6) — depends on transactions existing.
+5. **Transactions module** (2.4) — done, except balance recalculation (see next item).
+6. **Balance calculation and Periods** (2.5, 2.6) — depends on transactions existing (done), but balance calculation is now also gated on 2.15b's `.xlsm` analysis (decided when 2.4 was built — see 2.5). A full Periods management screen is still unbuilt.
 7. **Business-standard test scenarios** (3.8) — once the rules they encode (2.4, 2.5, 2.6, 2.7) actually exist, write the acceptance-style scenarios that pin down correct behavior for late payments, penalties, discounts, rejected refunds, and balance carry-over.
 8. **Reports + export** (2.8), then **charts/statistics** (2.9).
 9. **Backups** (2.10) and **import** (2.11) — more independent features, can be tackled in parallel or at the end.
 10. **Long-term non-functionals**: Alembic (a technical prerequisite — move it earlier if the schema starts changing a lot), encryption (2.13), Postgres migration (2.14) — these come into play once the functional domain is more mature and there's real data to protect.
 11. **Visual/UI polish** (4.3) — best done once the screens it applies to actually exist (transactions/periods/reports), so styling isn't reworked twice; earlier if the user wants the look-and-feel decided up front instead.
+12. **Titular per numero_socio** (2.17) — queued right after the transactions module PR merges (it depends on `TransactionDialog`/`TransactionsService` existing on `main`); design already decided, see 2.17 for the build sketch.
 
 ---
 
@@ -162,3 +170,6 @@ All previously open questions have been answered by the user; nothing outstandin
 - **Postgres migration / encryption timeline**: long-term goals, not scheduled now — keep `create_all`/SQLite until the functional domain is mature. See 2.13, 2.14.
 - **UI redesign direction**: no specific reference from the user — Claude proposed a design (palette, spacing, icons) in [`UI_PROPOSAL.md`](UI_PROPOSAL.md), pending approval before wide rollout. See 4.3.
 - **Transactions navigation model**: both entry points, not either/or — the Members toolbar's "Registrar" button stays as a socio-pre-filled shortcut, *and* a standalone `Transacciones` screen is added to the main menu for club-wide browsing/filtering (README's fecha/tipo/estado filter requirement needs the standalone screen; the quick shortcut alone couldn't satisfy it). Both share one dialog and one service. See 2.4.
+- **Transaction integrity rules**: a reembolso can't exceed (sum of pago − sum of already-refunded reembolso) scoped to the same numero_socio+período; an exact-duplicate Transaccion (same numero_socio/tipo/monto/id_periodo/id_metodo/fecha) is rejected. See `CLAUDE.md`'s `features/transactions/service.py` section.
+- **Balance recalculation sequencing**: deferred until the legacy `.xlsm` (2.15b) is analyzed, rather than guessing at the formula while building the transactions module. See 2.5.
+- **Titular model**: `Socio.es_titular` boolean, auto-unset-other-on-set (with a UI swap confirmation), a brand-new `numero_socio` must get a titular immediately, existing `numero_socio` groups are left unset/blocked until an admin assigns one manually (no auto-backfill). See 2.17.
