@@ -180,10 +180,3 @@ class MembersService:
         """
         count = len(rows) if rows is not None else 0
         logger.info("MembersService.export_members(): placeholder exporting %d rows to %s", count, destination)
-
-    def register_transactions(self, selected_indices: List[int]) -> None:
-        """Handle transaction registration for given selected indices."""
-        if not selected_indices:
-            logger.info("MembersService.register_transactions: no member selected - opening general register")
-            return
-        logger.info("MembersService.register_transactions: selected rows=%s", selected_indices)
