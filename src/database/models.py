@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Numeric, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Numeric, UniqueConstraint, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 import datetime
 
@@ -16,6 +16,10 @@ class Socio(Base):
     fecha_alta = Column(Date)
     estado = Column(String, default="activo")
     observaciones = Column(String)
+    # primary holder per numero_socio - exactly one True per shared family
+    # number, enforced in MembersService.add_member/update_member, never at
+    # the DB layer (see PLAN.md 2.17).
+    es_titular = Column(Boolean, nullable=False, default=False)
 
     # relationships: use class names and matching back_populates attribute names
     transacciones = relationship("Transaccion", back_populates="socio")

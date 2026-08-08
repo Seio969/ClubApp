@@ -54,7 +54,10 @@ class TransactionsService:
 
         Ordered by apellidos/nombre so a searchable combo lists them
         alphabetically. Only estado="activo" socios are offered - registering
-        a movement for a deactivated member isn't a supported flow yet.
+        a movement for a deactivated member isn't a supported flow yet. Each
+        row includes es_titular (PLAN.md 2.17) so the dialog can default its
+        visible list to titulares while still resolving a searched-for
+        non-titular pick.
         """
         try:
             with get_session() as session:
@@ -70,12 +73,33 @@ class TransactionsService:
                         "numero_socio": s.numero_socio,
                         "nombre": s.nombre,
                         "apellidos": s.apellidos,
+                        "es_titular": bool(s.es_titular),
                     }
                     for s in rows
                 ]
         except Exception as exc:
             logger.exception("TransactionsService.list_socios_activos: failed - %s", exc)
             return []
+
+    def has_titular(self, numero_socio: str) -> bool:
+        """Whether numero_socio already has a titular assigned (PLAN.md 2.17).
+
+        Pre-existing numero_socio groups that predate the titular feature
+        have none, and are blocked from the transaction dialog's picker
+        (both the open search and the Members-toolbar "Registrar" shortcut)
+        until an admin assigns one via Members/Ajustes.
+        """
+        try:
+            with get_session() as session:
+                return (
+                    session.query(Socio)
+                    .filter(Socio.numero_socio == numero_socio, Socio.es_titular.is_(True))
+                    .first()
+                    is not None
+                )
+        except Exception as exc:
+            logger.exception("TransactionsService.has_titular: failed for numero_socio=%s - %s", numero_socio, exc)
+            return False
 
     def list_metodos_pago_activos(self) -> List[Dict[str, Any]]:
         """Return active payment methods for the dialog's método dropdown."""
@@ -150,10 +174,14 @@ class TransactionsService:
                 numeros = {t.numero_socio for t in transacciones if t.numero_socio}
                 socio_display: Dict[str, str] = {}
                 if numeros:
+                    # Order titulares first (PLAN.md 2.17) so setdefault below
+                    # locks in the titular's name per numero_socio when one
+                    # exists, falling back to the first-by-id member of
+                    # groups that still have no titular assigned.
                     socios = (
                         session.query(Socio)
                         .filter(Socio.numero_socio.in_(numeros))
-                        .order_by(Socio.id_socio)
+                        .order_by(Socio.es_titular.desc(), Socio.id_socio)
                         .all()
                     )
                     for s in socios:

@@ -105,16 +105,29 @@ class TransactionDialog(QDialog):
         c_locale = QLocale.c()
 
         # --- Socio picker: searchable combo of active socios -------------
+        # Defaults to titulares only (PLAN.md 2.17), but the completer's
+        # search list covers every active socio in a numero_socio group that
+        # *has* a titular - selecting one dynamically adds it as a combo
+        # item (see _on_socio_completer_activated). Groups with no titular
+        # assigned yet are excluded entirely (blocked until an admin
+        # assigns one via Members/Ajustes).
         self.socio_input = QComboBox(self)
         self.socio_input.setEditable(True)
         self.socio_input.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self._socios = self.service.list_socios_activos()
-        for socio in self._socios:
+        numeros_con_titular = {s["numero_socio"] for s in self._socios if s.get("es_titular")}
+        self._selectable_socios = [s for s in self._socios if s["numero_socio"] in numeros_con_titular]
+        self._titulares = [s for s in self._selectable_socios if s.get("es_titular")]
+        for socio in self._titulares:
             label = f"{socio['numero_socio']} · {socio['nombre']} {socio['apellidos']}"
             self.socio_input.addItem(label, socio)
-        completer = QCompleter([self.socio_input.itemText(i) for i in range(self.socio_input.count())], self)
+        all_labels = [
+            f"{s['numero_socio']} · {s['nombre']} {s['apellidos']}" for s in self._selectable_socios
+        ]
+        completer = QCompleter(all_labels, self)
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        completer.activated.connect(self._on_socio_completer_activated)
         self.socio_input.setCompleter(completer)
         form.addRow("Socio*:", self.socio_input)
 
@@ -170,6 +183,25 @@ class TransactionDialog(QDialog):
 
         if preset_socio is not None:
             self._select_preset_socio(preset_socio)
+
+    def _on_socio_completer_activated(self, text: str) -> None:
+        """Handle picking a socio via the completer's search results.
+
+        The combo only starts populated with titulares; picking a
+        non-titular match (still allowed - see PLAN.md 2.17, "shouldn't
+        hard-block that") adds it as a combo item on the fly so
+        currentData() resolves correctly.
+        """
+        idx = self.socio_input.findText(text)
+        if idx >= 0:
+            self.socio_input.setCurrentIndex(idx)
+            return
+        for socio in self._selectable_socios:
+            label = f"{socio['numero_socio']} · {socio['nombre']} {socio['apellidos']}"
+            if label == text:
+                self.socio_input.addItem(label, socio)
+                self.socio_input.setCurrentIndex(self.socio_input.count() - 1)
+                return
 
     def _load_periodos(self, select_id: Optional[int] = None) -> None:
         self.periodo_input.clear()

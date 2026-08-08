@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDateEdit,
     QDialog,
@@ -47,6 +48,11 @@ class MemberDialog(QDialog):
         self.fecha_alta_input.setDate(QDate.currentDate())
         self.estado_input = QComboBox(self)
         self.estado_input.addItems(["activo", "inactivo"])
+        self.es_titular_input = QCheckBox(self)
+        self.es_titular_input.setToolTip(
+            "Titular (persona principal) del número de socio. Al marcarlo, "
+            "cualquier otro titular del mismo número se desmarcará."
+        )
         self.observaciones_input = QTextEdit(self)
         self.observaciones_input.setFixedHeight(60)
 
@@ -57,6 +63,7 @@ class MemberDialog(QDialog):
         form.addRow("Email:", self.email_input)
         form.addRow("Fecha de alta:", self.fecha_alta_input)
         form.addRow("Estado:", self.estado_input)
+        form.addRow("Es titular:", self.es_titular_input)
         form.addRow("Observaciones:", self.observaciones_input)
 
         layout.addLayout(form)
@@ -89,6 +96,8 @@ class MemberDialog(QDialog):
             if idx >= 0:
                 self.estado_input.setCurrentIndex(idx)
 
+        self.es_titular_input.setChecked(bool(data.get("es_titular")))
+
         self.observaciones_input.setPlainText(str(data.get("observaciones") or ""))
 
     def _on_accept(self) -> None:
@@ -114,5 +123,6 @@ class MemberDialog(QDialog):
             "email": self.email_input.text().strip() or None,
             "fecha_alta": datetime.date(qdate.year(), qdate.month(), qdate.day()),
             "estado": self.estado_input.currentText(),
+            "es_titular": self.es_titular_input.isChecked(),
             "observaciones": self.observaciones_input.toPlainText().strip() or None,
         }

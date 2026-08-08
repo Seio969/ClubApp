@@ -12,6 +12,7 @@ logger = get_logger(__name__)
 _COLUMN_MIGRATIONS = [
     ("metodos_pago", "estado", "ALTER TABLE metodos_pago ADD COLUMN estado VARCHAR DEFAULT 'activo'"),
     ("reglas_cobro", "estado", "ALTER TABLE reglas_cobro ADD COLUMN estado VARCHAR DEFAULT 'activo'"),
+    ("socios", "es_titular", "ALTER TABLE socios ADD COLUMN es_titular BOOLEAN DEFAULT 0"),
 ]
 
 
