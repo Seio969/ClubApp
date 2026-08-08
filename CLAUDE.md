@@ -37,7 +37,7 @@ src/
   main.py                   # entry point
   database/
     models.py                # SQLAlchemy ORM models (source of truth for schema)
-    session.py                # engine + SessionLocal
+    session.py                # engine + SessionLocal + get_session() context manager
     init_db.py                # creates tables from models
     db.sql                    # STALE schema dump, see "Schema drift"
   common/
@@ -92,11 +92,7 @@ Declares `Base = declarative_base()` and seven ORM classes. All monetary columns
 No Alembic/migration tooling exists — schema changes are made directly in `models.py` and applied via `create_all` (additive only) or by deleting `data/club_manager.db` and re-running `init_db()`.
 
 ### `src/database/session.py`
-```python
-engine = create_engine(DATABASE_URL, echo=True, future=True)
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-```
-`echo=True` is hardcoded — every SQL statement the engine runs is printed/logged. This is very noisy for a "production" build; if silence is ever needed, this is the one place to change it (no env-var toggle exists yet). `SessionLocal` is defined but not currently instantiated/used anywhere else in the codebase (no module actually opens an ORM session yet) — `view_registry.py` talks to the DB via raw `engine.connect()` + `text()`, not the ORM session.
+`echo` is no longer hardcoded — it reads `_ECHO = os.environ.get("CLUBAPP_DB_ECHO", ...)`, so verbose SQL logging is opt-in (`CLUBAPP_DB_ECHO=1`) instead of always-on. A `connect` event listener sets `PRAGMA journal_mode=WAL` and `PRAGMA synchronous=NORMAL` on every new connection so reads (the table/view browser) aren't blocked behind an in-progress write; it deliberately does **not** set `PRAGMA foreign_keys=ON` (see the docstring — enabling it makes SQLite reject the intentional non-unique `numero_socio` FK relationship). `SessionLocal` (the raw sessionmaker) is still exported, but the preferred way to write is the `get_session()` context manager defined here: it yields a `Session`, commits on success, rolls back and re-raises on exception, and always closes — `MembersService.add_member` (`features/members/toolbar_service.py`) is the first and only caller so far. `view_registry.py` still talks to the DB via raw `engine.connect()` + `text()`, not the ORM session.
 
 ### `src/database/init_db.py`
 Just `Base.metadata.create_all(bind=engine)` plus a log line. No seed data is inserted (e.g. `metodos_pago` rows for REMESA/EFECTIVO/TRANSFERENCIA/etc. from the README are not created anywhere in code).
