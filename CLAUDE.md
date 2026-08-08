@@ -24,6 +24,10 @@ There is no linter, formatter, or type-checker configured anywhere in this repo 
 ### Creating/merging GitHub pull requests
 The `gh` CLI is **not installed** in this dev environment — don't shell out to `gh pr create`/`gh pr merge`, it will fail with "command not found." Use the GitHub REST API directly instead (`curl`/PowerShell `Invoke-RestMethod`), authenticated with the `GH_TOKEN` environment variable (a fine-grained PAT scoped to this repo, set as a persistent user env var — see `setx` on Windows). If `GH_TOKEN` isn't set in the environment, don't try to open/merge a PR yourself — tell the user and let them do it manually (e.g. via VS Code's GitHub Pull Requests extension) instead of guessing at auth.
 
+The repo is `Seio969/ClubApp` (owner/repo for the REST API's `/repos/{owner}/{repo}/...` paths) — no need to run `git remote get-url origin` to derive this each time.
+
+**Known gap:** as of 2026-08-08, `GH_TOKEN` can create PRs (`POST /pulls`) but merging (`PUT /pulls/{number}/merge`) 403s with "Resource not accessible by personal access token" — the `X-Accepted-GitHub-Permissions` response header on other endpoints shows the token is scoped for `metadata=read` only-ish access; it's missing the `contents: write` permission a merge requires. Until the PAT's permissions are widened, treat PR creation as automatable but merging as a manual step for the user (via the web UI or VS Code's GitHub Pull Requests extension) — don't retry the merge call expecting a different result.
+
 ### Import path convention
 
 Every module uses absolute imports rooted at `src/` (e.g. `from database.session import engine`, `from features.members.menu_view import show_members_view`, `from utils.logger import get_logger`) — never `from src....`. This only resolves when `src/` itself is on `sys.path`, which happens automatically because Python prepends the running script's own directory. In practice this means:
