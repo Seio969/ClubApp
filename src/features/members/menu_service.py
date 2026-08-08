@@ -1,15 +1,17 @@
 """Service layer for members menu view.
 
 This module extracts non-UI/backend logic from the UI view so the
-presentation layer can remain thin and focused on widgets. It now
-includes helpers to discover database tables and fetch "SELECT *"
-results dynamically into a Qt model.
+presentation layer can remain thin and focused on widgets. Members'
+data comes from a real, members-owned query over socios - the generic
+"browse any DB table" path this used to delegate to (ViewRegistry) was
+retired from this screen entirely (PLAN.md 2.16); ViewRegistry itself
+stays available as cross-cutting plumbing in common/view_registry.py
+for whatever future screen needs it next.
 """
 from __future__ import annotations
 
 from typing import Any, List, Optional, Tuple
 
-from common.view_registry import ViewRegistry
 from database.models import Socio
 from database.session import get_session
 from utils.text import normalize_for_match
@@ -41,10 +43,6 @@ class MembersMenuService:
     Methods in this class are UI-agnostic: they operate on model-like
     objects or return pure data that the UI can consume.
     """
-
-    def __init__(self) -> None:
-        # Delegate view/table discovery and fetching to ViewRegistry
-        self._view_registry = ViewRegistry()
 
     def _fetch_socios_rows(self) -> List[tuple]:
         """Return every Socio row as plain tuples, in `_SOCIO_COLUMNS` order.
@@ -125,41 +123,6 @@ class MembersMenuService:
         except Exception as exc:
             logger.exception("MembersMenuService.search_members: failed - %s", exc)
             return 0
-
-    def get_db_tables(self) -> List[str]:
-        return self._view_registry.get_db_tables()
-
-    def get_views(self) -> List[str]:
-        return self._view_registry.get_views()
-
-    def fetch_view(self, name: str, model: Any, limit: Optional[int] = None) -> int:
-        """Fetch a registered view (table/sql/callable) and populate the Qt model.
-        
-        Args:
-            name: Name of the view to fetch
-            model: Qt model to populate
-            limit: Optional limit on number of rows. If None, fetches all rows.
-        """
-        if model is None:
-            logger.warning("MembersMenuService.fetch_view: no model provided")
-            return 0
-        try:
-            keys, rows = self._view_registry.fetch_view(name, limit=limit)
-            self._populate_model(model, list(keys), rows)
-            return len(rows)
-        except Exception as exc:
-            logger.exception("MembersMenuService.fetch_view: failed - %s", exc)
-            return 0
-
-    def fetch_table(self, table_name: str, model: Any, limit: Optional[int] = None) -> int:
-        """Backward-compatible helper: fetch a table by name and populate model.
-        
-        Args:
-            table_name: Name of the table to fetch
-            model: Qt model to populate  
-            limit: Optional limit on number of rows. If None, fetches all rows.
-        """
-        return self.fetch_view(table_name, model, limit=limit)
 
     def get_filter_labels(self, model: Optional[Any]) -> List[str]:
         """Return a list of header labels for the provided model.

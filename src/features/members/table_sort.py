@@ -153,7 +153,7 @@ class TableSortMixin:
             if getattr(self, "_current_view_name", None):
                 # reload current view from service (original order)
                 try:
-                    self.load_table_view(self._current_view_name)
+                    self.load_table_view()
                     return
                 except Exception:
                     pass
