@@ -17,11 +17,16 @@ from sqlalchemy.orm import Session
 from database.audit import record_log
 from database.models import MetodoPago, Periodo, Socio, Transaccion
 from database.session import get_session
+from utils.text import normalize_for_match
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 TIPOS_TRANSACCION = ("cargo", "pago", "reembolso")
+
+# Columns for the standalone Transacciones screen (list_transactions), in
+# display order.
+_TRANSACCION_COLUMNS = ("ID", "Fecha", "Socio", "Tipo", "Monto", "Método", "Período", "Referencia")
 
 
 def _add_months(fecha: datetime.date, months: int) -> datetime.date:
@@ -105,6 +110,107 @@ class TransactionsService:
         except Exception as exc:
             logger.exception("TransactionsService.list_periodos: failed - %s", exc)
             return []
+
+    def list_transactions(
+        self,
+        text: str = "",
+        tipo: Optional[str] = None,
+        id_periodo: Optional[int] = None,
+        model: Any = None,
+        limit: Optional[int] = None,
+    ) -> int:
+        """Query transacciones (optionally filtered) and populate `model`.
+
+        Filters: `text` matches the socio column (numero_socio or the
+        representative name - see below) accent/case-insensitively; `tipo`
+        and `id_periodo` are exact matches, either None meaning "any".
+
+        Deliberately does NOT join Transaccion to Socio on numero_socio for
+        the display name: numero_socio is a shared, non-unique family
+        identifier (see models.py's note), so a join would silently
+        duplicate a transaction row once per family member sharing that
+        numero_socio. Instead, a numero_socio -> representative display
+        name map is built as a separate query and used only for display/
+        search text, never joined into the primary result set.
+        """
+        if model is None:
+            logger.warning("TransactionsService.list_transactions: no model provided")
+            return 0
+        try:
+            with get_session() as session:
+                query = session.query(Transaccion).order_by(
+                    Transaccion.fecha.desc(), Transaccion.id_transaccion.desc()
+                )
+                if tipo:
+                    query = query.filter(Transaccion.tipo == tipo)
+                if id_periodo:
+                    query = query.filter(Transaccion.id_periodo == id_periodo)
+                transacciones = query.all()
+
+                numeros = {t.numero_socio for t in transacciones if t.numero_socio}
+                socio_display: Dict[str, str] = {}
+                if numeros:
+                    socios = (
+                        session.query(Socio)
+                        .filter(Socio.numero_socio.in_(numeros))
+                        .order_by(Socio.id_socio)
+                        .all()
+                    )
+                    for s in socios:
+                        socio_display.setdefault(s.numero_socio, f"{s.nombre} {s.apellidos}")
+
+                metodo_names = {m.id_metodo: m.nombre for m in session.query(MetodoPago).all()}
+                periodo_names = {p.id_periodo: p.nombre for p in session.query(Periodo).all()}
+
+                rows = []
+                for t in transacciones:
+                    nombre = socio_display.get(t.numero_socio, "")
+                    socio_label = f"{t.numero_socio} · {nombre}" if nombre else str(t.numero_socio)
+                    rows.append(
+                        (
+                            t.id_transaccion,
+                            t.fecha,
+                            socio_label,
+                            t.tipo,
+                            t.monto,
+                            metodo_names.get(t.id_metodo, ""),
+                            periodo_names.get(t.id_periodo, ""),
+                            t.referencia or "",
+                        )
+                    )
+
+            needle = normalize_for_match(text) if text else ""
+            if needle:
+                rows = [r for r in rows if needle in normalize_for_match(r[2])]
+            if limit:
+                rows = rows[:limit]
+
+            self._populate_model(model, list(_TRANSACCION_COLUMNS), rows)
+            logger.info("TransactionsService.list_transactions: %d rows (tipo=%s, id_periodo=%s)", len(rows), tipo, id_periodo)
+            return len(rows)
+        except Exception as exc:
+            logger.exception("TransactionsService.list_transactions: failed - %s", exc)
+            return 0
+
+    @staticmethod
+    def _populate_model(model: Any, keys: List[str], rows: List[tuple]) -> None:
+        """Rebuild `model` in place from `keys` (headers) and `rows`."""
+        from PySide6.QtGui import QStandardItem
+
+        model.removeRows(0, model.rowCount())
+        model.setColumnCount(len(keys))
+        model.setRowCount(0)
+        model.setHorizontalHeaderLabels([str(k) for k in keys])
+        for row in rows:
+            items = [QStandardItem("") if v is None else QStandardItem(str(v)) for v in row]
+            model.appendRow(items)
+
+    def export_transactions(self, rows: Optional[List[List[str]]] = None, destination: Optional[str] = None) -> None:
+        """Export plain rows to a destination (placeholder, same shape as
+        MembersService.export_members - real export is PLAN.md 2.8's job).
+        """
+        count = len(rows) if rows is not None else 0
+        logger.info("TransactionsService.export_transactions(): placeholder exporting %d rows to %s", count, destination)
 
     def create_periodo_rapido(self, nombre: str, fecha_inicio: datetime.date) -> Optional[int]:
         """Minimal período creation for the transaction dialog's inline picker.

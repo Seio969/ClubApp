@@ -40,6 +40,37 @@ def _make_metodo(session, **overrides) -> MetodoPago:
     return metodo
 
 
+class _FakeModel:
+    """Minimal stand-in for QStandardItemModel, no QApplication needed.
+
+    Same shape as test_members_menu_service.py's _FakeModel - list_transactions
+    only calls removeRows/setColumnCount/setRowCount/
+    setHorizontalHeaderLabels/appendRow.
+    """
+
+    def __init__(self) -> None:
+        self.headers: list[str] = []
+        self.rows: list[list[str]] = []
+
+    def rowCount(self) -> int:
+        return len(self.rows)
+
+    def removeRows(self, start: int, count: int) -> None:
+        self.rows = []
+
+    def setColumnCount(self, count: int) -> None:
+        pass
+
+    def setRowCount(self, count: int) -> None:
+        pass
+
+    def setHorizontalHeaderLabels(self, labels: list[str]) -> None:
+        self.headers = list(labels)
+
+    def appendRow(self, items) -> None:
+        self.rows.append([item.text() for item in items])
+
+
 def _make_periodo(session, **overrides) -> Periodo:
     data = dict(
         nombre="Enero 2026",
@@ -354,3 +385,110 @@ class TestRefundRequiresPriorPayment:
         assert new_id is None
         with Session(test_engine) as session:
             assert session.query(Transaccion).filter_by(tipo="reembolso").count() == 0
+
+
+class TestListTransactions:
+    def test_no_model_returns_zero(self, test_engine):
+        assert TransactionsService().list_transactions("") == 0
+
+    def test_does_not_duplicate_rows_for_a_shared_numero_socio(self, test_engine):
+        """numero_socio is a shared family identifier - a naive join against
+        Socio for display names would return one row per family member
+        sharing it. A single Transaccion must still surface as one row.
+        """
+        with Session(test_engine) as session:
+            _make_socio(session, numero_socio="1001", nombre="Marta", apellidos="Fernandez")
+            _make_socio(session, numero_socio="1001", nombre="Jorge", apellidos="Fernandez")
+            metodo = _make_metodo(session)
+            periodo = _make_periodo(session)
+            session.add(
+                Transaccion(
+                    numero_socio="1001",
+                    id_periodo=periodo.id_periodo,
+                    id_metodo=metodo.id_metodo,
+                    tipo="pago",
+                    monto=decimal.Decimal("45.00"),
+                    fecha=datetime.date(2026, 1, 5),
+                )
+            )
+            session.commit()
+
+        model = _FakeModel()
+        added = TransactionsService().list_transactions("", model=model)
+
+        assert added == 1
+        assert len(model.rows) == 1
+
+    def test_filters_by_tipo(self, test_engine):
+        with Session(test_engine) as session:
+            socio = _make_socio(session)
+            metodo = _make_metodo(session)
+            periodo = _make_periodo(session)
+            session.add_all(
+                [
+                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="pago", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 1, 5)),
+                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="cargo", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 1, 1)),
+                ]
+            )
+            session.commit()
+
+        model = _FakeModel()
+        added = TransactionsService().list_transactions("", tipo="cargo", model=model)
+
+        assert added == 1
+        assert model.rows[0][3] == "cargo"
+
+    def test_filters_by_periodo(self, test_engine):
+        with Session(test_engine) as session:
+            socio = _make_socio(session)
+            metodo = _make_metodo(session)
+            periodo_a = _make_periodo(session, nombre="Enero", fecha_inicio=datetime.date(2026, 1, 1), fecha_fin=datetime.date(2026, 1, 31))
+            periodo_b = _make_periodo(session, nombre="Febrero", fecha_inicio=datetime.date(2026, 2, 1), fecha_fin=datetime.date(2026, 2, 28))
+            session.add_all(
+                [
+                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo_a.id_periodo, id_metodo=metodo.id_metodo, tipo="pago", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 1, 5)),
+                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo_b.id_periodo, id_metodo=metodo.id_metodo, tipo="pago", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 2, 5)),
+                ]
+            )
+            session.commit()
+            target_periodo_id = periodo_b.id_periodo
+
+        model = _FakeModel()
+        added = TransactionsService().list_transactions("", id_periodo=target_periodo_id, model=model)
+
+        assert added == 1
+        assert model.rows[0][6] == "Febrero"
+
+    def test_search_matches_numero_socio_and_nombre(self, test_engine):
+        with Session(test_engine) as session:
+            socio = _make_socio(session, numero_socio="1002", nombre="Jorge", apellidos="Dominguez")
+            metodo = _make_metodo(session)
+            periodo = _make_periodo(session)
+            session.add(
+                Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="pago", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 1, 5))
+            )
+            session.commit()
+
+        model = _FakeModel()
+        added = TransactionsService().list_transactions("jorge", model=model)
+
+        assert added == 1
+        assert "Jorge" in model.rows[0][2]
+
+    def test_orders_most_recent_fecha_first(self, test_engine):
+        with Session(test_engine) as session:
+            socio = _make_socio(session)
+            metodo = _make_metodo(session)
+            periodo = _make_periodo(session)
+            session.add_all(
+                [
+                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="pago", monto=decimal.Decimal("10.00"), fecha=datetime.date(2026, 1, 1)),
+                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="pago", monto=decimal.Decimal("20.00"), fecha=datetime.date(2026, 1, 20)),
+                ]
+            )
+            session.commit()
+
+        model = _FakeModel()
+        TransactionsService().list_transactions("", model=model)
+
+        assert [r[1] for r in model.rows] == ["2026-01-20", "2026-01-01"]
