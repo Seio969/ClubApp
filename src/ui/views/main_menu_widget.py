@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QAction
-from ui.views.members.members_menu_view import show_members_view
+from features.members.menu_view import show_members_view
 from ui.styles import MAIN_MENU_STYLESHEET, TITLE_STYLE, BUTTON_FONT_STYLE
 from utils.logger import get_logger
 logger = get_logger(__name__)

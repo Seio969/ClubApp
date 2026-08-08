@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Callable, Dict, List, Optional, Any
 
 from database.models import Socio
-from database.session import SessionLocal
+from database.session import get_session
 from utils.logger import get_logger
 logger = get_logger(__name__)
 
@@ -28,24 +28,21 @@ class MembersService:
         `data` should contain the Socio field values (see MemberDialog.get_data).
         Returns the new row's id_socio on success, or None on failure.
         """
-        session = SessionLocal()
         try:
-            socio = Socio(**data)
-            session.add(socio)
-            session.commit()
-            session.refresh(socio)
+            with get_session() as session:
+                socio = Socio(**data)
+                session.add(socio)
+                session.flush()  # populate id_socio before the session closes
+                new_id = socio.id_socio
             logger.info(
                 "MembersService.add_member: created socio id=%s numero_socio=%s",
-                socio.id_socio,
-                socio.numero_socio,
+                new_id,
+                data.get("numero_socio"),
             )
-            return socio.id_socio
+            return new_id
         except Exception as exc:
-            session.rollback()
             logger.exception("MembersService.add_member: failed to create member - %s", exc)
             return None
-        finally:
-            session.close()
 
     def edit_member(self, selected_indices: List[int], model_getter: Optional[Callable[[int, int], Any]] = None) -> None:
         """Prepare an edit operation for the first selected index.

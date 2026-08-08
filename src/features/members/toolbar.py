@@ -15,8 +15,8 @@ from PySide6.QtGui import QStandardItemModel, QStandardItem
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QWidget
 
-from services.members_toolbar_service import MembersService
-from .member_dialog import MemberDialog
+from .toolbar_service import MembersService
+from .dialog import MemberDialog
 from utils.logger import get_logger
 logger = get_logger(__name__)
 
