@@ -83,9 +83,9 @@ QPushButton { min-width: 90px; min-height: 28px; }
 #resultsTable QTableView::item {
     color: #000000;
 }
-# /* Make sure header section text is also black */
-# #resultsTable QHeaderView::section {
-#     color: #000000;
+/* Make sure header section text is also black */
+#resultsTable QHeaderView::section {
+    color: #000000;
 }
 """
 
