@@ -1,4 +1,4 @@
-"""Settings service: payment methods (MetodoPago) CRUD.
+"""Payment methods (MetodoPago) CRUD service.
 
 The 5 payment methods fixed by README.md ("Formas de Pago") are always
 present (seeded by database.seed_db) and are protected here from renaming
@@ -25,7 +25,7 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-class SettingsService:
+class MetodosPagoService:
     def is_fixed(self, nombre: str) -> bool:
         return nombre in METODOS_PAGO_FIJOS
 
@@ -44,14 +44,14 @@ class SettingsService:
                     for row in rows
                 ]
         except Exception as exc:
-            logger.exception("SettingsService.list_metodos_pago: failed - %s", exc)
+            logger.exception("MetodosPagoService.list_metodos_pago: failed - %s", exc)
             return []
 
     def add_metodo_pago(self, nombre: str) -> Optional[int]:
         """Create a new custom payment method. Returns its id, or None on failure."""
         nombre = (nombre or "").strip()
         if not nombre:
-            logger.warning("SettingsService.add_metodo_pago: empty nombre")
+            logger.warning("MetodosPagoService.add_metodo_pago: empty nombre")
             return None
         try:
             with get_session() as session:
@@ -67,27 +67,27 @@ class SettingsService:
                     id_registro_afectado=new_id,
                     descripcion_cambio=f"Alta de método de pago '{nombre}'",
                 )
-            logger.info("SettingsService.add_metodo_pago: created id=%s nombre=%s", new_id, nombre)
+            logger.info("MetodosPagoService.add_metodo_pago: created id=%s nombre=%s", new_id, nombre)
             return new_id
         except Exception as exc:
-            logger.exception("SettingsService.add_metodo_pago: failed to create '%s' - %s", nombre, exc)
+            logger.exception("MetodosPagoService.add_metodo_pago: failed to create '%s' - %s", nombre, exc)
             return None
 
     def rename_metodo_pago(self, id_metodo: int, nuevo_nombre: str) -> bool:
         """Rename a custom payment method. Fixed methods can't be renamed."""
         nuevo_nombre = (nuevo_nombre or "").strip()
         if not nuevo_nombre:
-            logger.warning("SettingsService.rename_metodo_pago: empty nuevo_nombre")
+            logger.warning("MetodosPagoService.rename_metodo_pago: empty nuevo_nombre")
             return False
         try:
             with get_session() as session:
                 metodo = session.get(MetodoPago, id_metodo)
                 if metodo is None:
-                    logger.warning("SettingsService.rename_metodo_pago: no metodo id=%s", id_metodo)
+                    logger.warning("MetodosPagoService.rename_metodo_pago: no metodo id=%s", id_metodo)
                     return False
                 if self.is_fixed(metodo.nombre):
                     logger.warning(
-                        "SettingsService.rename_metodo_pago: '%s' is fixed, refusing rename", metodo.nombre
+                        "MetodosPagoService.rename_metodo_pago: '%s' is fixed, refusing rename", metodo.nombre
                     )
                     return False
                 old_nombre = metodo.nombre
@@ -100,10 +100,10 @@ class SettingsService:
                     id_registro_afectado=id_metodo,
                     descripcion_cambio=f"nombre: '{old_nombre}' -> '{nuevo_nombre}'",
                 )
-            logger.info("SettingsService.rename_metodo_pago: id=%s renamed to '%s'", id_metodo, nuevo_nombre)
+            logger.info("MetodosPagoService.rename_metodo_pago: id=%s renamed to '%s'", id_metodo, nuevo_nombre)
             return True
         except Exception as exc:
-            logger.exception("SettingsService.rename_metodo_pago: failed id=%s - %s", id_metodo, exc)
+            logger.exception("MetodosPagoService.rename_metodo_pago: failed id=%s - %s", id_metodo, exc)
             return False
 
     def set_metodo_pago_estado(self, id_metodo: int, estado: str) -> bool:
@@ -112,7 +112,7 @@ class SettingsService:
             with get_session() as session:
                 metodo = session.get(MetodoPago, id_metodo)
                 if metodo is None:
-                    logger.warning("SettingsService.set_metodo_pago_estado: no metodo id=%s", id_metodo)
+                    logger.warning("MetodosPagoService.set_metodo_pago_estado: no metodo id=%s", id_metodo)
                     return False
                 metodo.estado = estado
                 record_log(
@@ -123,8 +123,8 @@ class SettingsService:
                     id_registro_afectado=id_metodo,
                     descripcion_cambio=f"Método de pago '{metodo.nombre}' marcado como {estado}",
                 )
-            logger.info("SettingsService.set_metodo_pago_estado: id=%s -> %s", id_metodo, estado)
+            logger.info("MetodosPagoService.set_metodo_pago_estado: id=%s -> %s", id_metodo, estado)
             return True
         except Exception as exc:
-            logger.exception("SettingsService.set_metodo_pago_estado: failed id=%s - %s", id_metodo, exc)
+            logger.exception("MetodosPagoService.set_metodo_pago_estado: failed id=%s - %s", id_metodo, exc)
             return False

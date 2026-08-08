@@ -1,4 +1,4 @@
-"""Tests for SettingsService's metodos_pago CRUD (PLAN.md 2.7).
+"""Tests for MetodosPagoService's metodos_pago CRUD (PLAN.md 2.7).
 
 Fixed methods (the 5 from README.md, database.seed_db.METODOS_PAGO_FIJOS)
 are protected from renaming; nothing is ever physically deleted - "remove"
@@ -13,13 +13,13 @@ from sqlalchemy.orm import Session
 
 from database.models import Log, MetodoPago
 from database.seed_db import METODOS_PAGO_FIJOS, seed_metodos_pago
-from features.settings.service import SettingsService
+from features.settings.metodos_pago_service import MetodosPagoService
 
 
 class TestListMetodosPago:
     def test_flags_fixed_vs_custom(self, test_engine):
         seed_metodos_pago()
-        service = SettingsService()
+        service = MetodosPagoService()
         service.add_metodo_pago("BIZUM")
 
         rows = service.list_metodos_pago()
@@ -33,7 +33,7 @@ class TestListMetodosPago:
 
 class TestAddMetodoPago:
     def test_persists_and_returns_new_id(self, test_engine):
-        service = SettingsService()
+        service = MetodosPagoService()
 
         new_id = service.add_metodo_pago("BIZUM")
 
@@ -44,7 +44,7 @@ class TestAddMetodoPago:
             assert metodo.estado == "activo"
 
     def test_rejects_duplicate_name(self, test_engine):
-        service = SettingsService()
+        service = MetodosPagoService()
         service.add_metodo_pago("BIZUM")
 
         second_id = service.add_metodo_pago("BIZUM")
@@ -54,7 +54,7 @@ class TestAddMetodoPago:
             assert session.query(MetodoPago).filter_by(nombre="BIZUM").count() == 1
 
     def test_creates_audit_log_row(self, test_engine):
-        service = SettingsService()
+        service = MetodosPagoService()
 
         new_id = service.add_metodo_pago("BIZUM")
 
@@ -69,7 +69,7 @@ class TestAddMetodoPago:
 
 class TestRenameMetodoPago:
     def test_renames_custom_method(self, test_engine):
-        service = SettingsService()
+        service = MetodosPagoService()
         new_id = service.add_metodo_pago("BIZUM")
 
         ok = service.rename_metodo_pago(new_id, "BIZUM 2")
@@ -80,7 +80,7 @@ class TestRenameMetodoPago:
 
     def test_refuses_to_rename_fixed_method(self, test_engine):
         seed_metodos_pago()
-        service = SettingsService()
+        service = MetodosPagoService()
         with Session(test_engine) as session:
             efectivo_id = session.query(MetodoPago).filter_by(nombre="EFECTIVO").one().id_metodo
 
@@ -91,14 +91,14 @@ class TestRenameMetodoPago:
             assert session.get(MetodoPago, efectivo_id).nombre == "EFECTIVO"
 
     def test_returns_false_for_unknown_id(self, test_engine):
-        service = SettingsService()
+        service = MetodosPagoService()
 
         assert service.rename_metodo_pago(999, "BIZUM") is False
 
 
 class TestSetMetodoPagoEstado:
     def test_deactivates_and_reactivates_custom_method(self, test_engine):
-        service = SettingsService()
+        service = MetodosPagoService()
         new_id = service.add_metodo_pago("BIZUM")
 
         assert service.set_metodo_pago_estado(new_id, "inactivo") is True
@@ -113,7 +113,7 @@ class TestSetMetodoPagoEstado:
         # Fixed methods can't be renamed/deleted, but can be deactivated -
         # e.g. the club stops accepting a method without erasing it.
         seed_metodos_pago()
-        service = SettingsService()
+        service = MetodosPagoService()
         with Session(test_engine) as session:
             efectivo_id = session.query(MetodoPago).filter_by(nombre="EFECTIVO").one().id_metodo
 
@@ -126,7 +126,7 @@ class TestSetMetodoPagoEstado:
             assert metodo.nombre == "EFECTIVO"
 
     def test_creates_audit_log_row(self, test_engine):
-        service = SettingsService()
+        service = MetodosPagoService()
         new_id = service.add_metodo_pago("BIZUM")
 
         service.set_metodo_pago_estado(new_id, "inactivo")
@@ -137,6 +137,6 @@ class TestSetMetodoPagoEstado:
             assert logs[0].id_registro_afectado == new_id
 
     def test_returns_false_for_unknown_id(self, test_engine):
-        service = SettingsService()
+        service = MetodosPagoService()
 
         assert service.set_metodo_pago_estado(999, "inactivo") is False

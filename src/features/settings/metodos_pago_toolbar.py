@@ -11,8 +11,8 @@ from PySide6.QtGui import QStandardItemModel
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QWidget
 
-from .service import SettingsService
-from .dialog import MetodoPagoDialog
+from .metodos_pago_service import MetodosPagoService
+from .metodos_pago_dialog import MetodoPagoDialog
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -24,17 +24,17 @@ COL_ESTADO = 2
 COL_TIPO = 3
 
 
-class SettingsToolBar(QToolBar):
+class MetodosPagoToolBar(QToolBar):
     """Toolbar with Nuevo/Editar/Activar-Desactivar/Refrescar for MetodoPago."""
 
-    def __init__(self, parent: Optional["QWidget"] = None, service: Optional[SettingsService] = None) -> None:
+    def __init__(self, parent: Optional["QWidget"] = None, service: Optional[MetodosPagoService] = None) -> None:
         super().__init__(parent)
-        self.setObjectName("settingsToolBar")
+        self.setObjectName("metodosPagoToolBar")
         self.setMovable(False)
         self.setIconSize(QSize(18, 18))
         self.table: Optional[QTableView] = None
         self.model: Optional[QStandardItemModel] = None
-        self.service: SettingsService = service or SettingsService()
+        self.service: MetodosPagoService = service or MetodosPagoService()
 
         self._setup_actions()
 
@@ -77,7 +77,7 @@ class SettingsToolBar(QToolBar):
             try:
                 parent.refresh_table()
             except Exception as exc:
-                logger.exception("SettingsToolBar: refresh_table failed - %s", exc)
+                logger.exception("MetodosPagoToolBar: refresh_table failed - %s", exc)
 
     def on_add_metodo(self) -> None:
         dialog = MetodoPagoDialog(self)
@@ -108,7 +108,7 @@ class SettingsToolBar(QToolBar):
         nombre_actual = nombre_item.text() if nombre_item is not None else ""
 
         if id_metodo is None:
-            logger.warning("SettingsToolBar.on_edit_metodo: could not resolve id_metodo for row=%s", row)
+            logger.warning("MetodosPagoToolBar.on_edit_metodo: could not resolve id_metodo for row=%s", row)
             return
         if self.service.is_fixed(nombre_actual):
             QMessageBox.information(
@@ -145,7 +145,7 @@ class SettingsToolBar(QToolBar):
         except (ValueError, AttributeError):
             id_metodo = None
         if id_metodo is None:
-            logger.warning("SettingsToolBar.on_toggle_estado: could not resolve id_metodo for row=%s", row)
+            logger.warning("MetodosPagoToolBar.on_toggle_estado: could not resolve id_metodo for row=%s", row)
             return
 
         nombre = nombre_item.text() if nombre_item is not None else ""

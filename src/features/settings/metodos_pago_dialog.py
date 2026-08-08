@@ -20,7 +20,7 @@ class MetodoPagoDialog(QDialog):
 
     Pass `initial_nombre` to open in "rename" mode; omit it for "new
     method" mode. Fixed methods should never reach this dialog in rename
-    mode - SettingsToolBar checks that before opening it.
+    mode - MetodosPagoToolBar checks that before opening it.
     """
 
     def __init__(self, parent: Optional[QWidget] = None, initial_nombre: Optional[str] = None) -> None:

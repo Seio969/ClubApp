@@ -1,13 +1,13 @@
-"""Settings screen.
+"""Settings hub screen ("Ajustes").
 
-Currently hosts one section: payment methods (MetodoPago) management -
-PLAN.md 2.7. Billing rules (ReglaCobro) will be added as a second section
-in a follow-up chunk.
-
-Unlike Members' screen, this table has a handful of rows at most (5 fixed
-methods plus whatever custom ones the club adds), so there's no
-search/límite/sort composition here - just a table and a toolbar, per
-UI_PROPOSAL.md's "small grids" guidance for this screen.
+A landing screen reachable from the main menu that lists Settings'
+sections as navigation buttons, the same way MainMenuWidget lists its
+top-level screens - Ajustes is not itself the métodos-de-pago table, it's
+a hub that métodos de pago (and, in a follow-up chunk, reglas de cobro)
+hang off of. See PLAN.md 2.7: "Settings screen... should host:
+billing-rule management, payment methods, and possibly..." - i.e.
+multiple sections, not one screen doing double duty as both the hub and
+its only section.
 """
 
 from __future__ import annotations
@@ -18,26 +18,20 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
+    QGridLayout,
     QLabel,
     QPushButton,
     QStyle,
     QSizePolicy,
-    QTableView,
-    QHeaderView,
-    QAbstractItemView,
+    QMessageBox,
 )
-from PySide6.QtGui import QStandardItemModel, QStandardItem
-from PySide6.QtCore import Qt, QEvent
+from PySide6.QtCore import Qt
 
-from .toolbar import SettingsToolBar
-from .service import SettingsService
-from features.members.column_fill import ensure_columns_fill as _ensure_columns_fill
+from .metodos_pago_view import show_metodos_pago_view
 from ui.styles import SETTINGS_MENU_STYLESHEET
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-_HEADERS = ["ID", "Nombre", "Estado", "Tipo"]
 
 
 class SettingsView(QWidget):
@@ -50,7 +44,7 @@ class SettingsView(QWidget):
         main_layout.setContentsMargins(8, 8, 8, 8)
         main_layout.setSpacing(10)
 
-        # --- Top bar: back button + screen title -----------------------
+        # --- Top bar: back button + screen title ------------------------
         top_bar = QWidget(self)
         top_bar.setObjectName("topBar")
         top_layout = QHBoxLayout(top_bar)
@@ -64,62 +58,33 @@ class SettingsView(QWidget):
         back_button.clicked.connect(self.on_back_to_main_menu)
         top_layout.addWidget(back_button, 0, Qt.AlignmentFlag.AlignLeft)
 
-        title = QLabel("Métodos de pago")
+        title = QLabel("Ajustes")
         title.setObjectName("screenTitle")
         top_layout.addWidget(title, 0, Qt.AlignmentFlag.AlignCenter)
         top_layout.addStretch(1)
 
         main_layout.addWidget(top_bar)
 
-        # --- Toolbar -----------------------------------------------------
-        self.toolbar = SettingsToolBar(self)
-        main_layout.addWidget(self.toolbar)
+        # --- Section buttons ----------------------------------------------
+        sections_grid = QGridLayout()
+        sections_grid.setSpacing(16)
+        main_layout.addLayout(sections_grid)
+        main_layout.addStretch(1)
 
-        # --- Table ---------------------------------------------------------
-        self.table = QTableView(self)
-        self.table.setObjectName("resultsTable")
-        self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setAlternatingRowColors(True)
-
-        self.model = QStandardItemModel(0, len(_HEADERS), self)
-        self.model.setHorizontalHeaderLabels(_HEADERS)
-        self.table.setModel(self.model)
-
-        header = self.table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        header.setDefaultSectionSize(140)
-        header.setStretchLastSection(False)
-
-        self.toolbar.set_table_references(self.table, self.model)
-        self._service = SettingsService()
-
-        main_layout.addWidget(self.table)
+        sections = [
+            ("💳 Métodos de pago", self.on_open_metodos_pago),
+            ("📋 Reglas de cobro", self.on_open_reglas_cobro),
+        ]
+        columns = 2
+        for idx, (label, handler) in enumerate(sections):
+            btn = QPushButton(label)
+            btn.setMinimumWidth(240)
+            btn.setMinimumHeight(56)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(handler)
+            sections_grid.addWidget(btn, idx // columns, idx % columns, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.setStyleSheet(SETTINGS_MENU_STYLESHEET)
-
-        try:
-            self.load_table_view()
-        except Exception:
-            logger.exception("SettingsView.__init__: initial load_table_view failed")
-
-        try:
-            self.ensure_columns_fill()
-        except Exception:
-            pass
-
-        self.table.viewport().installEventFilter(self)
-
-    def eventFilter(self, obj, ev):
-        if obj is not None and ev.type() == QEvent.Type.Resize and obj is self.table.viewport():
-            try:
-                self.ensure_columns_fill()
-            except Exception:
-                pass
-        return super().eventFilter(obj, ev)
-
-    def ensure_columns_fill(self) -> None:
-        _ensure_columns_fill(self.table, self.model)
 
     def on_back_to_main_menu(self) -> None:
         if self.main_window and hasattr(self.main_window, "_stack") and hasattr(self.main_window, "_home"):
@@ -127,30 +92,17 @@ class SettingsView(QWidget):
         else:
             logger.warning("SettingsView.on_back_to_main_menu: no se pudo navegar al menú principal")
 
-    def load_table_view(self) -> None:
-        """Reload the metodos_pago table from the database."""
-        metodos = self._service.list_metodos_pago()
-        self.model.setRowCount(0)
-        for metodo in metodos:
-            row = [
-                QStandardItem(str(metodo["id_metodo"])),
-                QStandardItem(metodo["nombre"]),
-                QStandardItem(metodo["estado"] or "activo"),
-                QStandardItem("Fijo" if metodo["fijo"] else "Personalizado"),
-            ]
-            for item in row:
-                item.setEditable(False)
-            self.model.appendRow(row)
-        try:
-            self.ensure_columns_fill()
-        except Exception:
-            pass
+    def on_open_metodos_pago(self) -> None:
+        if self.main_window is not None:
+            show_metodos_pago_view(self.main_window)
 
-    def refresh_table(self) -> None:
-        try:
-            self.load_table_view()
-        except Exception as exc:
-            logger.exception("SettingsView.refresh_table: failed - %s", exc)
+    def on_open_reglas_cobro(self) -> None:
+        # Billing rules CRUD is a separate, not-yet-built part of PLAN.md
+        # 2.7 - placeholder until that chunk lands, same pattern as the
+        # File/Edit menu's not_implemented() stubs in menu_bar.py.
+        QMessageBox.information(
+            self, "Reglas de cobro", "La gestión de reglas de cobro todavía no está implementada."
+        )
 
 
 def show_settings_view(main_window) -> None:
