@@ -3,11 +3,10 @@
 A landing screen reachable from the main menu that lists Settings'
 sections as navigation buttons, the same way MainMenuWidget lists its
 top-level screens - Ajustes is not itself the métodos-de-pago table, it's
-a hub that métodos de pago (and, in a follow-up chunk, reglas de cobro)
-hang off of. See PLAN.md 2.7: "Settings screen... should host:
-billing-rule management, payment methods, and possibly..." - i.e.
-multiple sections, not one screen doing double duty as both the hub and
-its only section.
+a hub that métodos de pago and reglas de cobro hang off of. See PLAN.md
+2.7: "Settings screen... should host: billing-rule management, payment
+methods, and possibly..." - i.e. multiple sections, not one screen doing
+double duty as both the hub and its only section.
 """
 
 from __future__ import annotations
@@ -23,11 +22,11 @@ from PySide6.QtWidgets import (
     QPushButton,
     QStyle,
     QSizePolicy,
-    QMessageBox,
 )
 from PySide6.QtCore import Qt
 
 from .metodos_pago_view import show_metodos_pago_view
+from .reglas_cobro_view import show_reglas_cobro_view
 from ui.styles import SETTINGS_MENU_STYLESHEET
 from utils.logger import get_logger
 
@@ -97,12 +96,8 @@ class SettingsView(QWidget):
             show_metodos_pago_view(self.main_window)
 
     def on_open_reglas_cobro(self) -> None:
-        # Billing rules CRUD is a separate, not-yet-built part of PLAN.md
-        # 2.7 - placeholder until that chunk lands, same pattern as the
-        # File/Edit menu's not_implemented() stubs in menu_bar.py.
-        QMessageBox.information(
-            self, "Reglas de cobro", "La gestión de reglas de cobro todavía no está implementada."
-        )
+        if self.main_window is not None:
+            show_reglas_cobro_view(self.main_window)
 
 
 def show_settings_view(main_window) -> None:
