@@ -119,10 +119,15 @@ No `features/transactions/` exists yet.
 
 ## 3. Technical debt / infrastructure
 
-1. **No test suite (high priority).** No `tests/` directory, no `pytest` in dependencies. Since the app mixes business logic with Qt, it's worth:
-   - Aggressively separating pure logic (services: `toolbar_service.py`, `menu_service.py`, future `transactions/service.py`, balance calculation) from the Qt layer, so it's testable without spinning up a `QApplication`.
-   - Adding `pytest` + `pytest-qt` (for the few cases that do need a real `QApplication`) to `pyproject.toml` as a dev dependency.
-   - Prioritizing tests for: `ViewRegistry` (with an in-memory SQLite DB), `MembersService.add_member` (uses `get_session()`, easy to test with a test engine), `_normalize_for_sort`/`_make_sort_key` in `menu_view.py` (pure functions, high value, bug-prone), and eventually balance calculation (financially critical).
+1. **No test suite (high priority).**
+
+   **Completed** (branch `chore/testing-infrastructure`): `pytest` added as a dev dependency with `tests/` wired up (`tests/conftest.py`'s `test_engine` fixture isolates every DB-touching test on a throwaway SQLite file), plus first tests for `MembersService.add_member`, `ViewRegistry`, and `TableSortMixin._normalize_for_sort`/`_make_sort_key` (`features/members/table_sort.py`). See `CLAUDE.md`'s `tests/` section for what's covered and the fixture's engine-patching gotcha.
+
+   **Still pending:**
+   - `pytest-qt` — deferred, no test yet needs a real `QApplication`.
+   - Aggressively separating pure logic (services: `toolbar_service.py`, `menu_service.py`, future `transactions/service.py`, balance calculation) from the Qt layer beyond what's already service-separated.
+   - Tests for balance calculation, once that logic exists (2.5).
+   - No Qt-level tests yet (views/dialogs/toolbars), and no coverage of `edit_member`/`delete_members`/export paths.
 2. **No linter/formatter/type-checker.** No `ruff`, `black`, or `mypy` in `pyproject.toml`. Since the code already uses type hints (`Optional`, `dict[str, Any]`, etc.), `mypy` or `pyright` would add real value, especially in the service layer.
 3. **No CI.** No `.github/workflows/`. Once a test suite exists, adding a minimal workflow (`uv sync` + `pytest`) would catch regressions like the `on_refresh` indentation bug — though a linter would have caught that one too (even if not as a syntax error).
 4. **`db.sql` and `db.md` are out of date** relative to `models.py` (a `forma_pago`/`estado` columns in `db.sql` that don't exist on the ORM; `id_usuario`/`usuarios` naming in `db.md` that doesn't match `id_socio`/`socios`). Decide: keep them manually in sync every time `models.py` changes, or generate them automatically (e.g. with `sqlalchemy-schemadisplay` or similar) so they can't drift again.

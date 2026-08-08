@@ -17,8 +17,9 @@ Dependencies are managed with **uv** (`uv.lock` is present; no `requirements.txt
 - Install deps: `uv sync`
 - Run the app (from repo root): `uv run python src/main.py`
 - Initialize/reset the DB schema only: `uv run python src/database/init_db.py` (calls `Base.metadata.create_all` — creates missing tables, does **not** drop/alter existing ones, so it won't pick up column changes on an existing `data/club_manager.db`; delete the DB file to fully rebuild)
+- Run tests: `uv run pytest` (see `tests/` below)
 
-There is no test suite, linter, formatter, or type-checker configured anywhere in this repo (no `pytest`, `ruff`, `mypy`, etc. in `pyproject.toml`).
+There is no linter, formatter, or type-checker configured anywhere in this repo (no `ruff`, `mypy`, etc. in `pyproject.toml`). `pytest` is present as a dev dependency; see `tests/` below for what's actually covered — most of the app (Qt views, most services) still has no tests.
 
 ### Import path convention
 
@@ -29,7 +30,7 @@ Every module uses absolute imports rooted at `src/` (e.g. `from database.session
 
 ## Directory layout and file-by-file reference
 
-The codebase is organized as a hybrid: `database/`/`common/`/`ui/`/`utils/` are cross-cutting layers (ORM models, generic table browsing, app shell/chrome, logging), while each domain screen lives in its own package under `features/` (view, toolbar, dialog, and backing services together). As new domains (transactions, periods, reports) get built out, they should each get their own `features/<domain>/` package following the `features/members/` shape below, rather than adding more flat files to a `services/` layer.
+The codebase is organized as a hybrid: `database/`/`common/`/`ui/`/`utils/` are cross-cutting layers (ORM models, generic table browsing, app shell/chrome, logging), while each domain screen lives in its own package under `features/` (view, toolbar, dialog, and backing services together). As new domains (transactions, periods, reports) get built out, they should each get their own `features/<domain>/` package following the `features/members/` shape below, rather than adding more flat files to a `services/` layer. `tests/` (pytest suite, see below) sits at the repo root alongside `src/`, not inside it.
 
 ```
 src/
@@ -111,6 +112,15 @@ Central mechanism for generic, DB-driven table browsing:
 - `fetch_table(table_name, limit)`: validates the table exists, builds `SELECT * FROM "<table>"` (optionally `LIMIT :limit` via a bound parameter — safe from injection for the limit value), executes via a raw `engine.connect()`, returns `(keys, rows)`. `limit=0` is normalized to "no limit" (`None`).
 - `fetch_view(name, limit)`: dispatches on the registered type (`table`/`sql`/`callable`); for `sql`-type views it tries `f"{sql} LIMIT :limit"` first and falls back to the raw unlimited SQL if that fails (e.g. if the SQL already has a trailing clause `LIMIT` can't just be appended to). **Caution**: `table_name`/`sql` values are interpolated directly into the query string via an f-string (not parameterized) — safe today because table names only ever come from `inspector.get_table_names()`, not user input, but don't extend this to accept arbitrary user-supplied table/SQL strings without adding validation.
 - All methods catch broad `Exception`, log via `logger.exception(...)`, and return empty results rather than raising — callers never need to handle exceptions from this class, but failures are silent unless you check the logs.
+
+### `tests/` — pytest suite
+Run with `uv run pytest` from the repo root. `pyproject.toml`'s `[tool.pytest.ini_options]` sets `pythonpath = ["src"]` (so tests use the same absolute imports as the app, e.g. `from database.models import Socio`) and `testpaths = ["tests"]`.
+
+`conftest.py`'s `test_engine` fixture is the one piece of infrastructure every DB-touching test depends on: it creates a throwaway per-test SQLite file (via pytest's `tmp_path`) with all tables created from `Base.metadata`, then monkeypatches it into **both** `database.session.engine`/`SessionLocal` **and** `common.view_registry`'s separately-imported `engine` name. This second patch is required because `view_registry.py` does `from database.session import engine`, which binds its own module-level reference at import time — patching only `database.session.engine` would leave a constructed `ViewRegistry` still pointed at the real `data/club_manager.db`. **If a future module imports `engine` (or `SessionLocal`) by name the same way, add the same explicit patch to this fixture, or its tests will silently read/write the real DB instead of the isolated one.**
+
+`pytest-qt` is **not** installed — no test so far needs a live `QApplication` (the sort-key helpers in `table_sort.py` are plain functions on the mixin, exercised without instantiating any Qt widgets). Add `pytest-qt` only once a test actually requires one.
+
+Current coverage: `MembersService.add_member` (persistence, NOT NULL rollback, shared-`numero_socio` semantics), `ViewRegistry` (table auto-registration, `fetch_table`/`fetch_view` across all three view types, limit handling), and `TableSortMixin._normalize_for_sort`/`_make_sort_key` (accent/casefold normalization, numeric-vs-text key ordering) in `features/members/table_sort.py`. Nothing else in the app has tests yet — no Qt view/dialog/toolbar tests, no coverage of `edit_member`/`delete_members`/exports, no balance-calculation tests (that logic doesn't exist yet).
 
 ### `src/features/members/menu_service.py` — `MembersMenuService`
 - `__init__` owns one `ViewRegistry` instance.
