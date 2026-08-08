@@ -4,7 +4,7 @@ _Generated: 2026-08-08. Based on direct inspection of the code in `src/`, `READM
 
 ## 0. Executive summary
 
-The project is at a **very early stage**: only the "Gestionar Miembros" (Manage Members) screen is partially wired up, and within it only **member creation** actually persists to the database. The rest of the financial functionality described in `README.md` (transactions, balances, periods, billing rules, reports, backups, import) **has no UI or service implemented at all**, even though the ORM schema for almost everything already exists in `models.py`. There is no test suite, no linter, no type-checker, and no CI configured.
+The project is at a **very early stage**: only the "Gestionar Miembros" (Manage Members) screen is wired up. Within it, member CRUD (search/create/edit/deactivate) is fully implemented, persisted, and audit-logged — export and transaction-registration are still logging placeholders. The rest of the financial functionality described in `README.md` (transactions, balances, periods, billing rules, reports, backups, import) **has no UI or service implemented at all**, even though the ORM schema for almost everything already exists in `models.py`. There is a small `pytest` suite (see §3) but no linter, no type-checker, and no CI configured.
 
 This document lists, by category, everything that's pending and proposes an execution order.
 
@@ -22,20 +22,18 @@ This document lists, by category, everything that's pending and proposes an exec
 
 ## 2. Critical business functionality — not implemented
 
-Everything below already has an ORM model declared in `models.py` but **zero UI and zero service logic**:
+**Completed** (branch `feat/members-crud-completion`):
+- [x] Real member search & default table load — replaced the `# FIXME` placeholder with a real query over `socios`; the default load now goes through the same query path instead of `ViewRegistry` (2.3)
+- [x] Editing members — `MemberDialog` reused in an "edit" mode (`initial_data`) + `MembersService.get_member`/`update_member` (2.1)
+- [x] Deactivation confirmation dialog before `MembersToolBar.on_delete_member` fires (2.2 / 4.4)
+- [x] Audit log rows written on every member create/edit/deactivate, via `database/audit.py`'s `record_log` (2.12 — writing only; reading them back is still open, see 2.12 below)
+- [x] Retired the generic "Vistas" multi-table browser from the Members screen (2.16)
 
-### 2.1 Editing members
-- No edit dialog exists (`dialog.py` only covers creation). `MembersService.edit_member` just logs the value of column 0 of the selected row; nothing is persisted.
-- **Pending**: `EditMemberDialog` (can reuse/generalize `MemberDialog` with a pre-populated "edit" mode) + `MembersService.update_member(id_socio, data)` using `get_session()`.
+Everything below already has an ORM model declared in `models.py` but **zero UI and zero service logic**, except where noted above:
 
 ### 2.2 Deactivating members (not physical deletion)
-- The core mechanism is done: `MembersService.delete_members` sets `estado = "inactivo"` via `UPDATE` (never `DELETE FROM socios`) — see `CLAUDE.md`'s `toolbar_service.py` notes for the durable soft-delete decision.
-- **Still pending**: a confirmation dialog before the action fires (4.4), and estado-aware filtering/display — today a deactivated member still shows up (now correctly marked `inactivo`) on the next reload since nothing filters by `estado` yet.
-
-### 2.3 Real member search & data loading
-- `MembersMenuService.search_members` is a placeholder marked `# FIXME` that fabricates a fake row (`["1", text, "n/a@example.com", "Activo"]`) — it doesn't query the DB at all.
-- **Pending**: replace it with a real query (ORM or parameterized SQL) over `socios` filtering by name, surname, member number, email, with `LIKE`/accent normalization consistent with `_normalize_for_sort` in `menu_view.py`.
-- The *default* table load has the same problem one level up: today it goes through `ViewRegistry.fetch_view("socios")` — a generic `SELECT * FROM socios`, not a members-owned query. Once real search exists, the default load should go through the same `MembersService` query path (e.g. "no filter" = same query with an empty filter), not through `ViewRegistry`. See 2.16 for why `ViewRegistry`-backed loading is being retired from this screen entirely.
+- Deactivation and its confirmation dialog are both done (see Completed block above).
+- **Still pending**: estado-aware filtering/display — today a deactivated member still shows up (now correctly marked `inactivo`) on the next reload since nothing filters by `estado` yet.
 
 ### 2.4 Transactions module (charges / payments / refunds)
 No `features/transactions/` exists yet.
@@ -83,9 +81,8 @@ No `features/transactions/` exists yet.
 - A non-functional requirement from the README; there's no Excel/CSV parser or drag-and-drop support in the current UI.
 
 ### 2.12 Audit / Log
-- The `Log` model exists but **nothing in the code creates `Log` rows** yet. Not even `add_member` (the only real write operation today) records an audit log. This contradicts the "Log every change" requirement.
-- **Pending**: decide on a single point (e.g. inside `get_session()` or in each write service) that inserts a `Log` row for every create/edit/deactivate.
-- **Pending (separate from writing logs):** where a user actually *reads* them back. See 2.16 — removing the generic "Vistas" browser took away the one accidental way `logs` was viewable at all; a real audit-log viewer screen still needs a home before this requirement is fully satisfied.
+- Writing `Log` rows on every member create/edit/deactivate is done (see Completed block above).
+- **Still pending (separate from writing logs):** where a user actually *reads* them back — no audit-log viewer screen exists yet. A readable timeline/text view fits `logs`' narrative-shaped rows (`accion`, `descripcion_cambio`, `fecha_hora`) better than a raw grid — candidate location: a tab under Settings, or a small dedicated `features/audit/` screen. See `CLAUDE.md`'s table-to-screen mapping note — `logs` is the one table still left without an assigned screen.
 
 ### 2.13 Security — encryption of sensitive data
 - An explicit non-functional requirement in the README ("Encrypted storage of sensitive data"). The SQLite `.db` today has no encryption at all (no SQLCipher, no column-level encryption). No related dependency in `pyproject.toml`.
@@ -101,20 +98,6 @@ No `features/transactions/` exists yet.
 - **Decided (safety)**: the user explicitly flagged this needs a *very safe* confirmation flow to avoid unintentional wipes — not a single `QMessageBox.warning` click. Use a type-to-confirm pattern (e.g. require typing the exact word "BORRAR"/"RESET" or the DB name into a text field before the action enables) plus clearly distinguishing the full-wipe button from the scoped-reset button in the UI (different color/wording) so they can't be mis-clicked for each other.
 - Depends on: the Settings screen existing (2.7), seed-data script (3.5), and — since it deletes the file at `config.DATA_DIR`, not a cwd-relative path — should be built alongside the `main.py` path-consistency fix (bug 1.3) so reset and startup agree on where the DB file lives.
 
-### 2.16 Retire the generic "Vistas" multi-table browser
-- **Decided.** The Members toolbar's "Vistas" dropdown is backed by `ViewRegistry`, which auto-registers *every* table in the DB (`socios`, `metodos_pago`, `periodo`, `reglas_cobro`, `transacciones`, `saldos_socios`, `logs`) via schema introspection and dumps whichever one is picked as a raw, unformatted `SELECT * FROM <table>`. It's being removed from Members and will **not** be added to the new Transacciones screen either — it exposes internal tables (notably the audit `logs` table) to a non-technical single end user with no design intent behind which tables appear, and would show raw FK ids instead of joined/labeled data if reused for transactions.
-- `ViewRegistry`/`common/view_registry.py` doesn't need to be deleted — it can stay as internal plumbing — but no production screen should call its generic `fetch_view` path going forward. Members' default load and search (2.3) move onto a real `MembersService` query instead.
-- **What replaces it** — every table gets a purpose-built home instead of a generic dump, and **the table existing in the schema doesn't dictate a grid/`QTableView` presentation** — the right UI shape depends on what the data actually is, not on it being a SQL table:
-
-  | Table | Where it becomes accessible | Presentation |
-  |---|---|---|
-  | `socios` | Members screen (existing) — real search/filter (2.3), not `ViewRegistry`. | Grid/table — it's a record list. |
-  | `transacciones` | Transacciones screen (2.4) — filtered by fecha/tipo/estado/período. | Grid/table — same reasoning. |
-  | `periodo` | Periods screen (2.6, not yet built) — open/close/edit periods. | Grid/table (small, low row count). |
-  | `metodos_pago`, `reglas_cobro` | Settings screen (2.7, not yet built) — CRUD for payment methods and billing rules. | Grid/table (small, low row count). |
-  | `saldos_socios` | No standalone screen — derived data (balance per socio per período). | Surfaced as a per-socio balance view inside Members and as aggregate/annual data inside Reports (2.8) — not a raw table anywhere. |
-  | `logs` | **Unscoped — needs a decision**, but now with a presentation lean too. README 2.12 ("Historial de auditoría") requires this be consultable, but no screen owns it yet. Given `logs` rows are really "who did what, when" narratives (`accion`, `descripcion_cambio`, `fecha_hora`), a **readable timeline/text view** ("05/01 14:32 — Sergio editó al socio #1002: teléfono cambiado de X a Y") fits better than a grid of raw columns — candidate location: a tab under Settings, or a small dedicated `features/audit/` screen. Blocks 2.12 from being fully closed out until decided. |
-
 ---
 
 ## 3. Technical debt / infrastructure
@@ -127,13 +110,12 @@ No `features/transactions/` exists yet.
    - `pytest-qt` — deferred, no test yet needs a real `QApplication`.
    - Aggressively separating pure logic (services: `toolbar_service.py`, `menu_service.py`, future `transactions/service.py`, balance calculation) from the Qt layer beyond what's already service-separated.
    - Tests for balance calculation, once that logic exists (2.5).
-   - No Qt-level tests yet (views/dialogs/toolbars), and no coverage of `edit_member`/`delete_members`/export paths.
+   - No Qt-level tests yet (views/dialogs/toolbars) — `get_member`/`update_member`/`delete_members`/`search_members` now have service-level coverage (see `CLAUDE.md`'s `tests/` section), but nothing exercises the toolbar's confirmation dialog or dialog pre-fill through a real `QApplication`. No coverage of exports.
 2. **No linter/formatter/type-checker.** No `ruff`, `black`, or `mypy` in `pyproject.toml`. Since the code already uses type hints (`Optional`, `dict[str, Any]`, etc.), `mypy` or `pyright` would add real value, especially in the service layer.
 3. **No CI.** No `.github/workflows/`. Once a test suite exists, adding a minimal workflow (`uv sync` + `pytest`) would catch regressions like the `on_refresh` indentation bug — though a linter would have caught that one too (even if not as a syntax error).
 4. **`db.sql` and `db.md` are out of date** relative to `models.py` (a `forma_pago`/`estado` columns in `db.sql` that don't exist on the ORM; `id_usuario`/`usuarios` naming in `db.md` that doesn't match `id_socio`/`socios`). Decide: keep them manually in sync every time `models.py` changes, or generate them automatically (e.g. with `sqlalchemy-schemadisplay` or similar) so they can't drift again.
 5. **No seed-data script.** A `seed_db.py` (or an extension of `init_db.py`) is missing to insert the fixed payment methods from the README after `create_all`.
 6. **No migrations (Alembic).** Any column change today requires manually deleting the `.db`; as the schema grows (transactions, balances, etc.) this becomes risky for a club's real data. Introduce Alembic soon, before there's production data to protect.
-7. **`edit_member`/`delete_members` in `toolbar_service.py`** should stop being logging placeholders and start using `get_session()` the way `add_member` already does, once the edit dialog exists.
 8. **Business-standard test scenarios.** **New request** — not previously in this plan. Distinct from unit tests over individual functions (item 1 above): this is a set of named, documented scenarios that encode the club's actual business rules end-to-end, e.g. "member pays full quota on time", "member pays late → penalty from `ReglaCobro` applied", "discount rule applied correctly", "refund attempted with no prior payment → rejected" (2.4's integrity rule), "period closed → new transactions against it are rejected" (2.6), "balance carried over correctly from a closed period to the next open one" (2.5). These should live as acceptance-style tests (e.g. `tests/scenarios/`) once pytest is in place (item 1), each scenario asserting the final DB state against the business rule it documents. The user has a separate realistic fake-data generator (one level above this repo) they intend to wire into the workspace later for populating the DB with sample data for manual testing/demos — that's a different, complementary concern from these business-rule scenarios, which are about *correctness*, not data volume.
 
 ---
@@ -143,8 +125,7 @@ No `features/transactions/` exists yet.
 1. **Settings screen** (`⚙️ Ajustes` in the main menu) — currently a no-op that only logs the click. Should host: billing-rule management, payment methods, and possibly the `numero_socio`/format toggle.
 2. **File/Edit menu** in `menu_bar.py` — New/Open/Save and all of Edit (Undo/Redo/Cut/Copy/Paste) are deliberate `not_implemented` stubs. Confirm with the user which of these make real sense in a desktop management app (Save/Open probably don't apply to an app backed by a persistent SQLite DB; Undo/Redo could have real value for member-editing operations).
 3. **Transactions, Periods, Reports screens** — don't exist yet, not even as a skeleton (`features/transactions/`, `features/periods/`, `features/reports/` haven't been created). Only `features/members/` follows the per-domain folder pattern documented in `CLAUDE.md`. For Transacciones specifically, see 2.4's decided navigation model: a member-scoped shortcut via Members' existing "Registrar" button *and* a standalone main-menu screen, not one or the other.
-4. **Confirmation before delete** — `on_delete_member` removes the model row with no confirmation dialog (`QMessageBox.question`), which is risky even while it's only in-memory today, and would be outright dangerous once it actually persists.
-5. **Overall visual/UI polish.** Bug 1.2 covers one specific rendering defect (the broken QSS header-color rule), but there's no wider design work planned yet: today the app is two hand-written QSS strings (`MAIN_MENU_STYLESHEET`, `MEMBERS_MENU_STYLESHEET` in `styles.py`) plus Qt's built-in `QStyle.SP_*` stock icons (no custom icon set, no consistent spacing/typography system, no light/dark theme, no design tokens). **Decided**: no specific reference given — Claude proposed a clean, modern look (palette, spacing, icons) for approval before wider rollout; see [`UI_PROPOSAL.md`](UI_PROPOSAL.md) for the full audit and design direction (token layer, unified ledger palette, `qtawesome` icons, extracted shared table/toolbar composition for future screens).
+4. **Overall visual/UI polish.** Bug 1.2 covers one specific rendering defect (the broken QSS header-color rule), but there's no wider design work planned yet: today the app is two hand-written QSS strings (`MAIN_MENU_STYLESHEET`, `MEMBERS_MENU_STYLESHEET` in `styles.py`) plus Qt's built-in `QStyle.SP_*` stock icons (no custom icon set, no consistent spacing/typography system, no light/dark theme, no design tokens). **Decided**: no specific reference given — Claude proposed a clean, modern look (palette, spacing, icons) for approval before wider rollout; see [`UI_PROPOSAL.md`](UI_PROPOSAL.md) for the full audit and design direction (token layer, unified ledger palette, `qtawesome` icons, extracted shared table/toolbar composition for future screens).
 
 ---
 
@@ -160,7 +141,7 @@ No `features/transactions/` exists yet.
 8. **Reports + export** (2.8), then **charts/statistics** (2.9).
 9. **Backups** (2.10) and **import** (2.11) — more independent features, can be tackled in parallel or at the end.
 10. **Long-term non-functionals**: Alembic (a technical prerequisite — move it earlier if the schema starts changing a lot), encryption (2.13), Postgres migration (2.14) — these come into play once the functional domain is more mature and there's real data to protect.
-11. **Visual/UI polish** (4.5) — best done once the screens it applies to actually exist (transactions/periods/reports), so styling isn't reworked twice; earlier if the user wants the look-and-feel decided up front instead.
+11. **Visual/UI polish** (4.4) — best done once the screens it applies to actually exist (transactions/periods/reports), so styling isn't reworked twice; earlier if the user wants the look-and-feel decided up front instead.
 
 ---
 
@@ -173,5 +154,4 @@ All previously open questions have been answered by the user; nothing outstandin
 - **Postgres migration / encryption timeline**: long-term goals, not scheduled now — keep `create_all`/SQLite until the functional domain is mature. See 2.13, 2.14.
 - **UI redesign direction**: no specific reference from the user — Claude proposed a design (palette, spacing, icons) in [`UI_PROPOSAL.md`](UI_PROPOSAL.md), pending approval before wide rollout. See 4.5.
 - **Transactions navigation model**: both entry points, not either/or — the Members toolbar's "Registrar" button stays as a socio-pre-filled shortcut, *and* a standalone `Transacciones` screen is added to the main menu for club-wide browsing/filtering (README's fecha/tipo/estado filter requirement needs the standalone screen; the quick shortcut alone couldn't satisfy it). Both share one dialog and one service. See 2.4.
-- **"Vistas" multi-table browser**: removed from Members, not added to Transacciones — it's a generic raw-table dump (including internal tables like `logs`) with no design intent, unsuitable for a non-technical end user. Each table gets a purpose-built home instead (see the mapping table in 2.16); `logs`/audit history is the one table this left without an assigned screen, still open.
 - **Database reset scope**: support both a full wipe and a scoped reset (clear transactions/balances/periods, keep members/settings). Must use a very safe, type-to-confirm-style flow to prevent unintentional wipes — not a single dismissable dialog. See 2.15.
