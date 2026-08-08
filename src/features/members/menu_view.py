@@ -360,20 +360,26 @@ class MembersMenuView(QWidget, TableSortMixin):
         """Reload the members table (socios) from the database.
 
         Goes through the real, members-owned query
-        (MembersMenuService.search_members with no filter) rather than
-        the generic ViewRegistry dump this screen used to fall back to -
-        the old "Vistas" dropdown that picked among arbitrary DB tables
-        has been removed entirely (PLAN.md 2.16); Members only ever shows
-        socios now.
+        (MembersMenuService.search_members) rather than the generic
+        ViewRegistry dump this screen used to fall back to - the old
+        "Vistas" dropdown that picked among arbitrary DB tables has been
+        removed entirely (PLAN.md 2.16); Members only ever shows socios now.
+
+        Re-applies whatever text is currently in the search box rather than
+        always reloading everyone - this is also what "Refrescar" and
+        changing the límite field call (via refresh_table), so pressing
+        either one after searching stays scoped to that search instead of
+        silently discarding it.
         """
         limit = self.get_limit()
-        logger.info("Cargando socios con límite: %s", limit)
+        text = self.search_input.text().strip()
+        logger.info("Cargando socios con límite: %s (filtro: '%s')", limit, text)
 
         # kept for TableSortMixin, which checks this before reloading on
         # sort-clear; always "socios" now that there's nothing else to load.
         self._current_view_name = "socios"
-        added = self._service.search_members("", self.model, limit=limit)
-        logger.info("Cargados %d socios con límite %s", added, limit)
+        added = self._service.search_members(text, self.model, limit=limit)
+        logger.info("Cargados %d socios con límite %s (filtro: '%s')", added, limit, text)
 
         # Refresh filters menu to match new columns
         self._populate_filters_menu()
