@@ -18,9 +18,9 @@ This document lists, by category, everything that's pending and proposes an exec
 - [x] `main.py` DB-path check now uses `config.DATA_DIR`
 - [x] `delete_members` now soft-deletes via DB `UPDATE`
 
-**Still pending — new request (user-observed, not yet implemented):**
-- **Multi-select "Editar" silently edits only the first selected row.** Affects all three toolbars that have an edit action: `MembersToolBar.on_edit_member`, `MetodosPagoToolBar.on_edit_metodo`, `ReglasCobroToolBar.on_edit_regla` — each resolves the target row via `sel[0]`/`_selected_row()` without checking how many rows are selected, so selecting several and clicking "Editar" quietly opens the dialog for just the first one. **Decided (durable):** edit should instead refuse (info message, no dialog) whenever more than one row is selected — editing stays strictly single-row across all three toolbars.
-- **Batch activar/desactivar for métodos de pago and reglas de cobro.** Unlike edit, status changes should support acting on multiple selected rows at once — contrasted deliberately with the edit restriction above. Members' "Eliminar" (`MembersService.delete_members`) already supports this (batch deactivate, one confirmation for the whole selection); `MetodosPagoToolBar`/`ReglasCobroToolBar`'s "Activar/Desactivar" currently only reads a single selected row (`_selected_row()`) and flips whatever that one row's current `estado` is. **Decided (durable):** replace the single toggle with two separate, always-batch-capable buttons — "Activar" and "Desactivar" — mirroring `delete_members`'s existing batch shape (list of row indices, one confirmation, per-row service call). Each button acts on every selected row *regardless of its current state*, but is a no-op for rows already in the target state — e.g. select 4 rows (3 activo, 1 inactivo) and click "Desactivar": the 3 activo rows become inactivo, the already-inactivo row is left untouched; click "Activar" instead on that same selection and only the 1 inactivo row changes, the 3 already-activo rows are ignored. Applies identically to `MetodosPagoToolBar` and `ReglasCobroToolBar`.
+**Completed** (branch `fix/multiselect-edit-guard`):
+- [x] Multi-select "Editar" now refuses with an info message (no dialog) when more than one row is selected — `MembersToolBar.on_edit_member`, `MetodosPagoToolBar.on_edit_metodo`, `ReglasCobroToolBar.on_edit_regla`
+- [x] Batch Activar/Desactivar for métodos de pago and reglas de cobro — the single ambiguous toggle is replaced by two always-batch-capable buttons
 
 ---
 

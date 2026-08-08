@@ -112,6 +112,11 @@ class MembersToolBar(QToolBar):
         if not sel:
             QMessageBox.information(self, "Editar miembro", "Seleccione un miembro para editar.")
             return
+        if len(sel) > 1:
+            QMessageBox.information(
+                self, "Editar miembro", "Seleccione un único miembro para editar."
+            )
+            return
 
         row = sel[0].row()
         id_item = self.model.item(row, 0)

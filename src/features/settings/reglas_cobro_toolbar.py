@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import List, Optional, Tuple, TYPE_CHECKING
 
 from PySide6.QtWidgets import QToolBar, QStyle, QTableView, QMessageBox
 from PySide6.QtCore import QSize
@@ -48,10 +48,15 @@ class ReglasCobroToolBar(QToolBar):
         act_edit.setToolTip("Editar la regla de cobro seleccionada")
         act_edit.triggered.connect(self.on_edit_regla)
 
-        icon_toggle = self.style().standardIcon(QStyle.SP_DialogCancelButton)
-        act_toggle = self.addAction(icon_toggle, "Activar/Desactivar")
-        act_toggle.setToolTip("Alternar el estado de la regla de cobro seleccionada")
-        act_toggle.triggered.connect(self.on_toggle_estado)
+        icon_activate = self.style().standardIcon(QStyle.SP_DialogYesButton)
+        act_activate = self.addAction(icon_activate, "Activar")
+        act_activate.setToolTip("Activar las reglas de cobro seleccionadas")
+        act_activate.triggered.connect(self.on_activate_reglas)
+
+        icon_deactivate = self.style().standardIcon(QStyle.SP_DialogNoButton)
+        act_deactivate = self.addAction(icon_deactivate, "Desactivar")
+        act_deactivate.setToolTip("Desactivar las reglas de cobro seleccionadas")
+        act_deactivate.triggered.connect(self.on_deactivate_reglas)
 
         self.addSeparator()
 
@@ -63,12 +68,6 @@ class ReglasCobroToolBar(QToolBar):
     def set_table_references(self, table: QTableView, model: QStandardItemModel) -> None:
         self.table = table
         self.model = model
-
-    def _selected_row(self) -> Optional[int]:
-        if self.table is None:
-            return None
-        sel = self.table.selectionModel().selectedRows()
-        return sel[0].row() if sel else None
 
     def _refresh_parent(self) -> None:
         parent = self.parent()
@@ -89,12 +88,18 @@ class ReglasCobroToolBar(QToolBar):
         self._refresh_parent()
 
     def on_edit_regla(self) -> None:
-        if self.model is None:
+        if self.model is None or self.table is None:
             return
-        row = self._selected_row()
-        if row is None:
+        sel = self.table.selectionModel().selectedRows()
+        if not sel:
             QMessageBox.information(self, "Editar regla", "Seleccione una regla de cobro para editar.")
             return
+        if len(sel) > 1:
+            QMessageBox.information(
+                self, "Editar regla", "Seleccione una única regla de cobro para editar."
+            )
+            return
+        row = sel[0].row()
 
         id_item = self.model.item(row, COL_ID)
         try:
@@ -119,44 +124,93 @@ class ReglasCobroToolBar(QToolBar):
             return
         self._refresh_parent()
 
-    def on_toggle_estado(self) -> None:
-        if self.model is None:
+    def on_activate_reglas(self) -> None:
+        self._set_estado_for_selection("activo")
+
+    def on_deactivate_reglas(self) -> None:
+        self._set_estado_for_selection("inactivo")
+
+    def _resolve_selected_rows(self) -> List[Tuple[int, str, str]]:
+        """Resolve every selected row to (id_regla, descripcion, estado_actual)."""
+        if self.table is None or self.model is None:
+            return []
+        resolved: List[Tuple[int, str, str]] = []
+        for index in self.table.selectionModel().selectedRows():
+            row = index.row()
+            id_item = self.model.item(row, COL_ID)
+            descripcion_item = self.model.item(row, COL_DESCRIPCION)
+            estado_item = self.model.item(row, COL_ESTADO)
+            try:
+                id_regla = int(id_item.text()) if id_item is not None else None
+            except (ValueError, AttributeError):
+                id_regla = None
+            if id_regla is None:
+                logger.warning("ReglasCobroToolBar: could not resolve id_regla for row=%s", row)
+                continue
+            descripcion = descripcion_item.text() if descripcion_item is not None else ""
+            estado_actual = estado_item.text() if estado_item is not None else "activo"
+            resolved.append((id_regla, descripcion, estado_actual))
+        return resolved
+
+    def _set_estado_for_selection(self, nuevo_estado: str) -> None:
+        """Activate or deactivate every selected rule, in a single batch.
+
+        Rows already in the target estado are left untouched (no-op) -
+        e.g. selecting 3 activo + 1 inactivo rows and clicking "Desactivar"
+        only changes the 3 activo ones (PLAN.md 1, decided).
+        """
+        if self.table is None or self.model is None:
             return
-        row = self._selected_row()
-        if row is None:
-            QMessageBox.information(self, "Activar/Desactivar", "Seleccione una regla de cobro.")
+        titulo = "Activar" if nuevo_estado == "activo" else "Desactivar"
+        sel = self.table.selectionModel().selectedRows()
+        if not sel:
+            QMessageBox.information(self, titulo, "Seleccione una o más reglas de cobro.")
             return
 
-        id_item = self.model.item(row, COL_ID)
-        descripcion_item = self.model.item(row, COL_DESCRIPCION)
-        estado_item = self.model.item(row, COL_ESTADO)
-        try:
-            id_regla = int(id_item.text()) if id_item is not None else None
-        except (ValueError, AttributeError):
-            id_regla = None
-        if id_regla is None:
-            logger.warning("ReglasCobroToolBar.on_toggle_estado: could not resolve id_regla for row=%s", row)
+        targets = [
+            (id_regla, descripcion)
+            for id_regla, descripcion, estado_actual in self._resolve_selected_rows()
+            if estado_actual != nuevo_estado
+        ]
+        if not targets:
+            verbo = "activas" if nuevo_estado == "activo" else "inactivas"
+            QMessageBox.information(self, titulo, f"Las reglas de cobro seleccionadas ya están {verbo}.")
             return
 
-        descripcion = descripcion_item.text() if descripcion_item is not None else ""
-        estado_actual = estado_item.text() if estado_item is not None else "activo"
-        nuevo_estado = "inactivo" if estado_actual == "activo" else "activo"
+        if nuevo_estado == "inactivo" and not self._confirm_deactivation([descripcion for _, descripcion in targets]):
+            return
 
-        if nuevo_estado == "inactivo":
-            reply = QMessageBox.question(
-                self,
-                "Confirmar desactivación",
-                f"¿Desactivar la regla de cobro '{descripcion}'?\n\nDejará de estar disponible para nuevos movimientos.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
+        failures = [
+            descripcion
+            for id_regla, descripcion in targets
+            if not self.service.set_regla_cobro_estado(id_regla, nuevo_estado)
+        ]
+        if failures:
+            QMessageBox.critical(
+                self, "Error", "No se pudo actualizar el estado de: " + ", ".join(failures)
             )
-            if reply != QMessageBox.StandardButton.Yes:
-                return
-
-        if not self.service.set_regla_cobro_estado(id_regla, nuevo_estado):
-            QMessageBox.critical(self, "Error", "No se pudo actualizar el estado de la regla de cobro.")
-            return
         self._refresh_parent()
+
+    def _confirm_deactivation(self, names: List[str]) -> bool:
+        if len(names) == 1:
+            message = (
+                f"¿Desactivar la regla de cobro '{names[0]}'?\n\n"
+                "Dejará de estar disponible para nuevos movimientos."
+            )
+        else:
+            listado = "\n".join(f"- {n}" for n in names)
+            message = (
+                f"¿Desactivar las siguientes {len(names)} reglas de cobro?\n\n{listado}\n\n"
+                "Dejarán de estar disponibles para nuevos movimientos."
+            )
+        reply = QMessageBox.question(
+            self,
+            "Confirmar desactivación",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return reply == QMessageBox.StandardButton.Yes
 
     def on_refresh(self) -> None:
         self._refresh_parent()
