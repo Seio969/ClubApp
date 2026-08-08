@@ -138,8 +138,10 @@ class TransactionDialog(QDialog):
 
         # --- Monto -----------------------------------------------------------
         self.monto_input = QLineEdit(self)
-        self.monto_input.setValidator(QDoubleValidator(0.01, 999999.99, 2, self))
-        self.monto_input.validator().setLocale(c_locale)
+        monto_validator = QDoubleValidator(0.01, 999999.99, 2, self)
+        monto_validator.setNotation(QDoubleValidator.Notation.StandardNotation)
+        monto_validator.setLocale(c_locale)
+        self.monto_input.setValidator(monto_validator)
         form.addRow("Monto (€)*:", self.monto_input)
 
         # --- Método de pago ------------------------------------------------
