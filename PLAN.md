@@ -18,6 +18,10 @@ This document lists, by category, everything that's pending and proposes an exec
 - [x] `main.py` DB-path check now uses `config.DATA_DIR`
 - [x] `delete_members` now soft-deletes via DB `UPDATE`
 
+**Still pending — new request (user-observed, not yet implemented):**
+- **Multi-select "Editar" silently edits only the first selected row.** Affects all three toolbars that have an edit action: `MembersToolBar.on_edit_member`, `MetodosPagoToolBar.on_edit_metodo`, `ReglasCobroToolBar.on_edit_regla` — each resolves the target row via `sel[0]`/`_selected_row()` without checking how many rows are selected, so selecting several and clicking "Editar" quietly opens the dialog for just the first one. **Decided (durable):** edit should instead refuse (info message, no dialog) whenever more than one row is selected — editing stays strictly single-row across all three toolbars.
+- **Batch activar/desactivar for métodos de pago and reglas de cobro.** Unlike edit, status changes should support acting on multiple selected rows at once — contrasted deliberately with the edit restriction above. Members' "Eliminar" (`MembersService.delete_members`) already supports this (batch deactivate, one confirmation for the whole selection); `MetodosPagoToolBar`/`ReglasCobroToolBar`'s "Activar/Desactivar" currently only reads a single selected row (`_selected_row()`) and flips whatever that one row's current `estado` is. **Open design question to resolve before implementing:** a single toggle button is ambiguous once multiple rows with *mixed* current states (some activo, some inactivo) are selected — candidate approach: split "Activar/Desactivar" into two separate, always-batch-capable buttons ("Activar" / "Desactivar"), mirroring `delete_members`'s existing batch shape (list of row indices, one confirmation, per-row service call) instead of one ambiguous toggle.
+
 ---
 
 ## 2. Critical business functionality — not implemented
