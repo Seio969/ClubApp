@@ -31,10 +31,16 @@ _SOCIO_COLUMNS: Tuple[str, ...] = (
     "email",
     "fecha_alta",
     "estado",
+    "es_titular",
     "observaciones",
 )
 # Columns matched against the search text.
 _SOCIO_SEARCH_COLUMNS: Tuple[str, ...] = ("numero_socio", "nombre", "apellidos", "email")
+# Index of es_titular within _SOCIO_COLUMNS, for the boolean -> "Sí"/"No"
+# display formatting in _fetch_socios_rows. Appended after estado rather
+# than inserted before id_socio/numero_socio/nombre/apellidos (columns 0-3),
+# whose fixed indices MembersToolBar relies on (see its module docstring).
+_ES_TITULAR_COL = _SOCIO_COLUMNS.index("es_titular")
 
 
 class MembersMenuService:
@@ -53,7 +59,12 @@ class MembersMenuService:
         """
         with get_session() as session:
             socios = session.query(Socio).order_by(Socio.id_socio).all()
-            return [tuple(getattr(s, col) for col in _SOCIO_COLUMNS) for s in socios]
+            rows = []
+            for s in socios:
+                values = [getattr(s, col) for col in _SOCIO_COLUMNS]
+                values[_ES_TITULAR_COL] = "Sí" if values[_ES_TITULAR_COL] else "No"
+                rows.append(tuple(values))
+            return rows
 
     def _filter_socio_rows(self, rows: List[tuple], text: Optional[str]) -> List[tuple]:
         """Filter `rows` (as returned by `_fetch_socios_rows`) by `text`.
