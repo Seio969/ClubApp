@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Callable, Dict, List, Optional, Any
 
+from database.audit import record_log
 from database.models import Socio
 from database.session import get_session
 from utils.logger import get_logger
@@ -34,6 +35,17 @@ class MembersService:
                 session.add(socio)
                 session.flush()  # populate id_socio before the session closes
                 new_id = socio.id_socio
+                record_log(
+                    session,
+                    id_socio=new_id,
+                    accion="crear",
+                    tabla_afectada="socios",
+                    id_registro_afectado=new_id,
+                    descripcion_cambio=(
+                        f"Alta de socio numero_socio={data.get('numero_socio')} "
+                        f"nombre={data.get('nombre')} {data.get('apellidos')}"
+                    ),
+                )
             logger.info(
                 "MembersService.add_member: created socio id=%s numero_socio=%s",
                 new_id,
@@ -84,8 +96,21 @@ class MembersService:
                 if socio is None:
                     logger.warning("MembersService.update_member: no socio with id_socio=%s", id_socio)
                     return False
+                changes = [
+                    f"{key}: {getattr(socio, key)!r} -> {value!r}"
+                    for key, value in data.items()
+                    if getattr(socio, key) != value
+                ]
                 for key, value in data.items():
                     setattr(socio, key, value)
+                record_log(
+                    session,
+                    id_socio=id_socio,
+                    accion="editar",
+                    tabla_afectada="socios",
+                    id_registro_afectado=id_socio,
+                    descripcion_cambio="; ".join(changes) if changes else "sin cambios en los campos",
+                )
             logger.info("MembersService.update_member: updated socio id_socio=%s", id_socio)
             return True
         except Exception as exc:
@@ -132,6 +157,14 @@ class MembersService:
                         logger.warning("MembersService.delete_members: no socio with id_socio=%s", id_socio)
                         continue
                     socio.estado = "inactivo"
+                    record_log(
+                        session,
+                        id_socio=id_socio,
+                        accion="desactivar",
+                        tabla_afectada="socios",
+                        id_registro_afectado=id_socio,
+                        descripcion_cambio=f"Socio numero_socio={socio.numero_socio} marcado como inactivo",
+                    )
                 logger.info("MembersService.delete_members: deactivated socio id_socio=%s", id_socio)
                 deactivated_rows.append(row)
             except Exception as exc:
