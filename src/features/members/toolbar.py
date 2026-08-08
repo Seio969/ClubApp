@@ -6,7 +6,7 @@ actions for creating, editing, deleting, refreshing, and exporting member data.
 
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 
 from PySide6.QtWidgets import QToolBar, QStyle, QTableView, QMessageBox
 from PySide6.QtCore import QSize
@@ -152,6 +152,12 @@ class MembersToolBar(QToolBar):
             return
         sel = self.table.selectionModel().selectedRows()
         indices = [s.row() for s in sel] if sel else []
+        if not indices:
+            QMessageBox.information(self, "Eliminar miembro", "Seleccione uno o más miembros para eliminar.")
+            return
+
+        if not self._confirm_deactivation(indices):
+            return
 
         def model_getter(row: int, col: int):
             if self.model is None:
@@ -165,6 +171,41 @@ class MembersToolBar(QToolBar):
         if self.model is not None and rows_to_remove:
             for r in rows_to_remove:
                 self.model.removeRow(r)
+
+    def _confirm_deactivation(self, rows: List[int]) -> bool:
+        """Ask the user to confirm deactivating the given selected rows.
+
+        Never a physical delete - just estado="inactivo" - but it now
+        persists to the real DB (PLAN.md 1's soft-delete fix), so it's
+        worth a confirmation step before it fires (PLAN.md 2.2/4.4).
+        """
+        names: List[str] = []
+        if self.model is not None:
+            for row in rows:
+                nombre_item = self.model.item(row, 2)
+                apellidos_item = self.model.item(row, 3)
+                parts = [item.text() for item in (nombre_item, apellidos_item) if item is not None and item.text()]
+                label = " ".join(parts).strip()
+                names.append(label if label else f"fila {row}")
+
+        if len(rows) == 1:
+            detail = names[0] if names else "el miembro seleccionado"
+            message = f"¿Desactivar a {detail}?\n\nEl miembro se marcará como inactivo; su historial no se elimina."
+        else:
+            listado = "\n".join(f"- {n}" for n in names) if names else f"{len(rows)} miembros"
+            message = (
+                f"¿Desactivar los siguientes {len(rows)} miembros?\n\n{listado}\n\n"
+                "Se marcarán como inactivos; su historial no se elimina."
+            )
+
+        reply = QMessageBox.question(
+            self,
+            "Confirmar desactivación",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return reply == QMessageBox.StandardButton.Yes
 
     def on_refresh(self) -> None:
         """Handle refresh action."""
