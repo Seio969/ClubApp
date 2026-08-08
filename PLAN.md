@@ -22,8 +22,8 @@ This document lists, by category, everything that's pending and proposes an exec
 - [x] Multi-select "Editar" now refuses with an info message (no dialog) when more than one row is selected — `MembersToolBar.on_edit_member`, `MetodosPagoToolBar.on_edit_metodo`, `ReglasCobroToolBar.on_edit_regla`
 - [x] Batch Activar/Desactivar for métodos de pago and reglas de cobro — the single ambiguous toggle is replaced by two always-batch-capable buttons
 
-**Pending:**
-- [ ] **Tighten numeric field validation in dialogs.** Reported by the user (2026-08-09) while checking why the "Monto" field in `TransactionDialog` seemed to let through characters that aren't digits. Root cause confirmed by testing the validator directly: every currency/numeric `QLineEdit` that uses `QDoubleValidator(min, max, decimals, self)` (`TransactionDialog.monto_input` in `features/transactions/dialog.py`; `ReglaCobroDialog.cuota_mensual_input`/`penalizacion_input`/`descuento_input` in `features/settings/reglas_cobro_dialog.py`) never calls `.setNotation(...)`, so Qt defaults to `QDoubleValidator.Notation.ScientificNotation`. That mode treats `+`, `e`, and `E` as valid *intermediate* keystrokes (toward things like `1e5`) even though they're not digits, while every other non-numeric character is correctly blocked — this is not a regression (git history shows these validator lines unchanged since they were first written) but it is a real latent bug: a value like `1e5` passes `hasAcceptableInput()` and gets silently parsed as `Decimal("1E+5")` (100000), which makes no sense for a currency field. Fix: add `.setNotation(QDoubleValidator.Notation.StandardNotation)` on each of these four validators so only plain decimal input (digits, one `.`/`,`, no exponent) is accepted. `ReglaCobroDialog.plazo_pago_input`'s `QIntValidator` should also be spot-checked for the same "unexpected non-digit intermediate input" class of issue.
+**Completed** (branch `fix/numeric-validator-scientific-notation`):
+- [x] Currency `QDoubleValidator`s (`TransactionDialog.monto_input`, `ReglaCobroDialog.cuota_mensual_input`/`penalizacion_input`/`descuento_input`) forced to `StandardNotation`, closing the scientific-notation (`1e5` → 100000) loophole; `plazo_pago_input`'s `QIntValidator` spot-checked and confirmed unaffected
 
 ---
 
@@ -176,25 +176,24 @@ Tooling: `openpyxl` + `oletools` were installed into a **throwaway `uv venv`** i
 
 ## 5. Recommended order of work
 
-**Done** (steps that drove the original ordering — kept here only as a progress marker, see §1/§2's own Completed blocks for detail): quick bugs from the original audit, minimal testing infrastructure, Members CRUD completion, seed data + Settings (incl. database reset), the transactions module minus balance recalculation, and titular per `numero_socio` (2.17).
+**Done** (steps that drove the original ordering — kept here only as a progress marker, see §1/§2's own Completed blocks for detail): quick bugs from the original audit, minimal testing infrastructure, Members CRUD completion, seed data + Settings (incl. database reset), the transactions module minus balance recalculation, titular per `numero_socio` (2.17), and the numeric validator scientific-notation fix (§1).
 
 **Next up — small, independent, unblocked fixes.** None of these need the still-open business-rule decisions below, so they're cheaper to clear now than to leave sitting alongside blocked work:
-1. **Numeric validator fix** (§1) — `QDoubleValidator` scientific-notation bug in `TransactionDialog.monto_input` and `ReglaCobroDialog`'s three currency fields; spot-check `plazo_pago_input` too. Smallest, most isolated of the group — reported today (2026-08-09).
-2. **Non-editable grid cells** (4.5) — `MembersMenuView`/`TransactionsView` need the same `item.setEditable(False)` pattern `MetodosPagoView`/`ReglasCobroView` already use, so in-place cell edits can't silently fail to persist.
-3. **Table selection persistence** (4.4) — remember the selected row's stable id across `load_table_view()`/`refresh_table()` rebuilds, on all four grid screens.
-4. **Estado-aware filtering for deactivated members** (2.2) — decide and implement how inactive members are handled on reload (today they silently reappear, just correctly marked `inactivo`).
-5. **Audit log viewer** (2.12) — `logs` is still the one table with no assigned screen; needs a location decision (tab under Settings vs. a small `features/audit/` screen) before building.
+1. **Non-editable grid cells** (4.5) — `MembersMenuView`/`TransactionsView` need the same `item.setEditable(False)` pattern `MetodosPagoView`/`ReglasCobroView` already use, so in-place cell edits can't silently fail to persist.
+2. **Table selection persistence** (4.4) — remember the selected row's stable id across `load_table_view()`/`refresh_table()` rebuilds, on all four grid screens.
+3. **Estado-aware filtering for deactivated members** (2.2) — decide and implement how inactive members are handled on reload (today they silently reappear, just correctly marked `inactivo`).
+4. **Audit log viewer** (2.12) — `logs` is still the one table with no assigned screen; needs a location decision (tab under Settings vs. a small `features/audit/` screen) before building.
 
 **Then — gated on user decisions, not on any remaining code:**
-6. **Balance calculation and Periods** (2.5, 2.6) — 2.15b's `.xlsm` analysis is done, but implementation is still blocked on resolving what it surfaced: período-scoped vs. continuous `saldo_actual`, devolución-vs-reembolso modeling, and `plazo_pago`/`descuento` values with no legacy precedent. A full Periods management screen is still unbuilt.
-7. **Business-standard test scenarios** (3.8) — once the rules they encode (2.4 done, 2.5/2.6 pending, 2.7 done) actually exist end-to-end.
+5. **Balance calculation and Periods** (2.5, 2.6) — 2.15b's `.xlsm` analysis is done, but implementation is still blocked on resolving what it surfaced: período-scoped vs. continuous `saldo_actual`, devolución-vs-reembolso modeling, and `plazo_pago`/`descuento` values with no legacy precedent. A full Periods management screen is still unbuilt.
+6. **Business-standard test scenarios** (3.8) — once the rules they encode (2.4 done, 2.5/2.6 pending, 2.7 done) actually exist end-to-end.
 
 **Then — larger, independent features:**
-8. **Reports + export** (2.8), then **charts/statistics** (2.9).
-9. **Backups** (2.10) and **import** (2.11) — can be tackled in parallel or at the end.
-10. **Long-term non-functionals**: Alembic (a technical prerequisite — move it earlier if the schema starts changing a lot), encryption (2.13), Postgres migration (2.14).
-11. **Visual/UI polish broader pass** (4.3) — the token layer/`qtawesome` icons/shared "data screen" composition extraction from `UI_PROPOSAL.md`, distinct from the targeted fixes in steps 2-3 above; best done once transactions/periods/reports screens exist so styling isn't reworked twice.
-12. **Second legacy workbook analysis** (2.15c) — deliberately deferred by the user; pick up whenever prioritized, independent of everything else in this list.
+7. **Reports + export** (2.8), then **charts/statistics** (2.9).
+8. **Backups** (2.10) and **import** (2.11) — can be tackled in parallel or at the end.
+9. **Long-term non-functionals**: Alembic (a technical prerequisite — move it earlier if the schema starts changing a lot), encryption (2.13), Postgres migration (2.14).
+10. **Visual/UI polish broader pass** (4.3) — the token layer/`qtawesome` icons/shared "data screen" composition extraction from `UI_PROPOSAL.md`, distinct from the targeted fixes in steps 1-2 above; best done once transactions/periods/reports screens exist so styling isn't reworked twice.
+11. **Second legacy workbook analysis** (2.15c) — deliberately deferred by the user; pick up whenever prioritized, independent of everything else in this list.
 
 ---
 
