@@ -153,17 +153,49 @@ class TestSearchMembers:
         assert added == 0
         assert model.rows == []
 
-    def test_inactive_members_are_still_matched(self, test_engine):
-        # estado-aware filtering/display doesn't exist yet (PLAN.md 2.2) -
-        # search must not silently hide deactivated members.
+    def test_inactive_members_hidden_by_default(self, test_engine):
+        # Estado-aware filtering (PLAN.md 2.2) - inactivo members are hidden
+        # unless include_inactive=True is passed.
         _add_socio(test_engine, numero_socio="1001", nombre="Marta", estado="inactivo")
         service = MembersMenuService()
         model = _FakeModel()
 
         added = service.search_members("Marta", model)
 
+        assert added == 0
+        assert model.rows == []
+
+    def test_inactive_members_matched_when_included(self, test_engine):
+        _add_socio(test_engine, numero_socio="1001", nombre="Marta", estado="inactivo")
+        service = MembersMenuService()
+        model = _FakeModel()
+
+        added = service.search_members("Marta", model, include_inactive=True)
+
         assert added == 1
         assert model.rows[0][7] == "inactivo"  # estado column
+
+    def test_active_members_matched_when_include_inactive_true(self, test_engine):
+        # include_inactive=True should still show active members, not swap them out.
+        _add_socio(test_engine, numero_socio="1001", nombre="Marta", estado="activo")
+        _add_socio(test_engine, numero_socio="1002", nombre="Jorge", estado="inactivo")
+        service = MembersMenuService()
+        model = _FakeModel()
+
+        added = service.search_members("", model, include_inactive=True)
+
+        assert added == 2
+
+    def test_empty_text_excludes_inactive_by_default(self, test_engine):
+        _add_socio(test_engine, numero_socio="1001", nombre="Marta", estado="activo")
+        _add_socio(test_engine, numero_socio="1002", nombre="Jorge", estado="inactivo")
+        service = MembersMenuService()
+        model = _FakeModel()
+
+        added = service.search_members("", model)
+
+        assert added == 1
+        assert model.rows[0][2] == "Marta"
 
     def test_es_titular_column_shows_si_no(self, test_engine):
         _add_socio(test_engine, numero_socio="1001", nombre="Marta", es_titular=True)

@@ -197,7 +197,10 @@ class MembersMenuView(QWidget, TableSortMixin):
         self._sort_order = None
         # Remember last search text so we can restore search results when clearing sort
         self._last_search_text = None
-        
+        # Estado-aware filtering (PLAN.md 2.2): hide inactivo members by
+        # default, opt-in via the "Mostrar inactivos" toggle in Filtros.
+        self._show_inactive = False
+
         # Set table and model references for the toolbar
         self.toolbar.set_table_references(self.table, self.model)
         # Backend/service used by the view
@@ -283,6 +286,16 @@ class MembersMenuView(QWidget, TableSortMixin):
 
         self.filters_menu.clear()
 
+        # "Mostrar inactivos" (PLAN.md 2.2): opt-in toggle, separate from the
+        # per-column visibility actions below - re-runs the query rather than
+        # hiding/showing a column.
+        show_inactive_action = QAction("Mostrar inactivos", self.filters_menu)
+        show_inactive_action.setCheckable(True)
+        show_inactive_action.setChecked(self._show_inactive)
+        show_inactive_action.toggled.connect(self._on_show_inactive_toggled)
+        self.filters_menu.addAction(show_inactive_action)
+        self.filters_menu.addSeparator()
+
         # Use the service to extract header labels and build actions
         labels = self._service.get_filter_labels(self.model)
         for col, label in enumerate(labels):
@@ -296,6 +309,11 @@ class MembersMenuView(QWidget, TableSortMixin):
     def _on_search_text_changed(self, _text: str) -> None:
         """Restart the debounce timer on every keystroke (PLAN.md 4.5)."""
         self._search_debounce_timer.start()
+
+    def _on_show_inactive_toggled(self, checked: bool) -> None:
+        """Handle the Filtros "Mostrar inactivos" toggle (PLAN.md 2.2)."""
+        self._show_inactive = checked
+        self.load_table_view()
 
     def on_search(self) -> None:
         """Perform a simple search using the text in the top bar input.
@@ -313,7 +331,7 @@ class MembersMenuView(QWidget, TableSortMixin):
         # Same row-persists-across-reload rule as load_table_view() (PLAN.md 4.4).
         selected_id = capture_selected_id(self.table, self.model)
         # Delegate search/population to service
-        added = self._service.search_members(text, self.model)
+        added = self._service.search_members(text, self.model, include_inactive=self._show_inactive)
         logger.info("Search added %d rows", added)
         restore_selected_id(self.table, self.model, selected_id)
         # After populating the model, ensure columns fill the available width
@@ -347,7 +365,7 @@ class MembersMenuView(QWidget, TableSortMixin):
         # kept for TableSortMixin, which checks this before reloading on
         # sort-clear; always "socios" now that there's nothing else to load.
         self._current_view_name = "socios"
-        added = self._service.search_members(text, self.model)
+        added = self._service.search_members(text, self.model, include_inactive=self._show_inactive)
         logger.info("Cargados %d socios (filtro: '%s')", added, text)
 
         # Refresh filters menu to match new columns
