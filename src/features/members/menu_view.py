@@ -38,6 +38,7 @@ logger = get_logger(__name__)
 from .toolbar import MembersToolBar
 from .column_fill import ensure_columns_fill as _ensure_columns_fill
 from .table_sort import TableSortMixin
+from .table_selection import capture_selected_id, restore_selected_id
 from ui.styles import MEMBERS_MENU_STYLESHEET
 from .menu_service import MembersMenuService
 class MembersMenuView(QWidget, TableSortMixin):
@@ -268,6 +269,13 @@ class MembersMenuView(QWidget, TableSortMixin):
                 pass
         return super().eventFilter(obj, ev)
 
+    def hideEvent(self, event) -> None:
+        """Clear the table selection whenever this screen stops being the
+        current widget (e.g. "Volver" to the main menu) - so returning to
+        Members later always starts with nothing selected (PLAN.md 4.4)."""
+        self.table.clearSelection()
+        super().hideEvent(event)
+
     def ensure_columns_fill(self) -> None:
         """Expand visible columns to fill available viewport width."""
         _ensure_columns_fill(self.table, self.model)
@@ -334,9 +342,12 @@ class MembersMenuView(QWidget, TableSortMixin):
         # remember last search so clearing sort can re-run it
         self._last_search_text = text
         logger.info("Buscar: '%s' con límite: %s", text, limit)
+        # Same row-persists-across-reload rule as load_table_view() (PLAN.md 4.4).
+        selected_id = capture_selected_id(self.table, self.model)
         # Delegate search/population to service
         added = self._service.search_members(text, self.model, limit=limit)
         logger.info("Search added %d rows", added)
+        restore_selected_id(self.table, self.model, selected_id)
         # After populating the model, ensure columns fill the available width
         try:
             self.ensure_columns_fill()
@@ -374,6 +385,11 @@ class MembersMenuView(QWidget, TableSortMixin):
         text = self.search_input.text().strip()
         logger.info("Cargando socios con límite: %s (filtro: '%s')", limit, text)
 
+        # Remember the selected row (by id_socio) so a plain reload - unlike
+        # a header-click sort, which clears it explicitly (see table_sort.py)
+        # - re-selects the same member afterwards (PLAN.md 4.4).
+        selected_id = capture_selected_id(self.table, self.model)
+
         # kept for TableSortMixin, which checks this before reloading on
         # sort-clear; always "socios" now that there's nothing else to load.
         self._current_view_name = "socios"
@@ -389,6 +405,9 @@ class MembersMenuView(QWidget, TableSortMixin):
         except Exception:
             # Non-critical; ignore reapply failures
             logger.debug("_maybe_reapply_sort failed (ignored)")
+
+        restore_selected_id(self.table, self.model, selected_id)
+
         # Ensure columns expand to fill the area after model load
         try:
             self.ensure_columns_fill()
