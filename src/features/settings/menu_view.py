@@ -116,7 +116,7 @@ def show_settings_view(main_window) -> None:
     sv = getattr(main_window, "_settings_view", None)
     if sv is None:
         sv = SettingsView(main_window)
-        setattr(main_window, "_settings_view", sv)
+        main_window._settings_view = sv
         main_window._stack.addWidget(sv)
 
     main_window._stack.setCurrentWidget(sv)

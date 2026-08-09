@@ -194,7 +194,7 @@ def show_reset_view(main_window) -> None:
     rv = getattr(main_window, "_reset_view", None)
     if rv is None:
         rv = ResetView(main_window)
-        setattr(main_window, "_reset_view", rv)
+        main_window._reset_view = rv
         main_window._stack.addWidget(rv)
 
     main_window._stack.setCurrentWidget(rv)

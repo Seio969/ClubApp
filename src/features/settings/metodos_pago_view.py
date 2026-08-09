@@ -163,7 +163,7 @@ def show_metodos_pago_view(main_window) -> None:
     mv = getattr(main_window, "_metodos_pago_view", None)
     if mv is None:
         mv = MetodosPagoView(main_window)
-        setattr(main_window, "_metodos_pago_view", mv)
+        main_window._metodos_pago_view = mv
         main_window._stack.addWidget(mv)
 
     main_window._stack.setCurrentWidget(mv)
