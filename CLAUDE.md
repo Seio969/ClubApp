@@ -56,7 +56,7 @@ src/
     members/
       menu_service.py          # real search/query logic for the members screen (socios only)
       toolbar_service.py       # CRUD logic for the members toolbar (add/get/update/delete, all audit-logged)
-      menu_view.py              # the members screen (search bar, límite, filtros, table)
+      menu_view.py              # the members screen (search bar, filtros, table)
       toolbar.py                 # QToolBar with Nuevo/Editar/Eliminar/Refrescar/Exportar/Registrar
       dialog.py                   # add/edit member dialog (one class, edit mode via initial_data)
       column_fill.py               # table column-width-fill helper
