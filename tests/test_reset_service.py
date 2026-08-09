@@ -37,7 +37,7 @@ def _seed_full_dataset(test_engine) -> dict:
             numero_socio="1001",
             id_periodo=periodo.id_periodo,
             id_metodo=metodo.id_metodo,
-            tipo="pago",
+            tipo="Pago",
             monto=decimal.Decimal("45.00"),
         )
         session.add(transaccion)

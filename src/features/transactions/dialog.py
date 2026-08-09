@@ -1,4 +1,4 @@
-"""Dialog for registering a transaction (cargo/pago/reembolso).
+"""Dialog for registering a transaction (Cargo/Pago/Reembolso/Devolución).
 
 Shared by both entry points decided in PLAN.md 2.4: the Members toolbar's
 "Registrar" shortcut (which pre-fills and locks the socio field via

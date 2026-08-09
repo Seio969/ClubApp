@@ -29,6 +29,9 @@ This document lists, by category, everything that's pending and proposes an exec
 - [x] Members and Transacciones grid cells made non-editable, matching the pattern `MetodosPagoView`/`ReglasCobroView` already used (4.5)
 - [x] `Refrescar` (and changing the límite field) no longer discards an active Members search — `MembersMenuView.load_table_view()` was hardcoding an empty search string on every reload instead of reading the search box, found while manually testing the fix above
 
+**Completed** (2026-08-09):
+- [x] Transacciones `tipo` casing bug — `TIPOS_TRANSACCION` was all-lowercase (`cargo`/`pago`/`reembolso`) while real DB data (from the legacy `.xlsm` import, see 2.15b) was mostly Title Case with a few stray lowercase `cargo` rows, making the Tipo filter dropdown/table inconsistent. Fixed: `TIPOS_TRANSACCION` is now `("Cargo", "Pago", "Reembolso", "Devolución")` — Title Case, plus `"Devolución"` added as the 4th type 2.15b already flagged as missing; `database/init_db.py`'s new `_normalize_tipo_transaccion()` cleans up any pre-existing mixed-case rows on every startup (idempotent, same pattern as `_add_missing_columns`). The tipo dropdown (`TransactionDialog.tipo_input`) was already a non-editable `QComboBox` restricted to `TIPOS_TRANSACCION`, so no separate "limit entries" change was needed there — only the constant's values. See 2.15b's mapping table for the still-open follow-ups (no validation rule for `"Devolución"` yet, bank-`cargo` concept unscoped).
+
 ---
 
 ## 2. Critical business functionality — not implemented
@@ -125,7 +128,7 @@ Tooling: `openpyxl` + `oletools` were installed into a **throwaway `uv venv`** i
 
 | Legacy concept | App feature | Status |
 |---|---|---|
-| `Cargos`/`Pagos`/`Devoluciones`(bounced)+`RECARGO` logs | `Transaccion` (2.4) | cargo/pago/reembolso done; **devolución (bounced pago) confirmed as a distinct 4th concept, not yet modeled** — needs a schema decision |
+| `Cargos`/`Pagos`/`Devoluciones`(bounced)+`RECARGO` logs | `Transaccion` (2.4) | cargo/pago/reembolso done; **`"Devolución"` added as a 4th `TIPOS_TRANSACCION` value (2026-08-09, tipo-casing bug fix)** — selectable in the dropdown and filter, but still just a plain `Transaccion` row: no balance-validation rule, no auto-computed 10% recargo pairing, and no "mark this pago as bounced" relationship. See the "Still open" note below. |
 | Global current-cuota cell (`36+5+1`) | `ReglaCobro.cuota_mensual` (2.5/2.7) | Legacy has one club-wide value, not multiple named rules — recommend treating it as one active rule for now |
 | Devolución + 10% recargo | `ReglaCobro.penalizacion` (2.5/2.7) | Recommend auto-computing 10% of the bounced amount rather than a manual second entry |
 | "día 10" recargo-trigger comment | `ReglaCobro.plazo_pago` (2.7) | Weak evidence (~10 days) — confirm with the user |
@@ -138,8 +141,9 @@ Tooling: `openpyxl` + `oletools` were installed into a **throwaway `uv venv`** i
 | VBA macros | none | Pure Excel workarounds; DB-backed queries already supersede them |
 
 **Decided (workflow, unchanged):** analyze and document first, agree on the implementation mapping with the user, *then* implement inside the relevant `features/<domain>/` package — not a direct/blind port of VBA into Python. This entry is that analysis-and-mapping deliverable.
-- **Decided (2026-08-08): devolución (bank-rejected pago) and reembolso (money back to a member) are distinct concepts** — `Transaccion` needs a way to represent the former that it doesn't have today (see the mapping table row above). Not yet designed.
+- **Decided (2026-08-08): devolución (bank-rejected pago) and reembolso (money back to a member) are distinct concepts** — `Transaccion` needs a way to represent the former that it doesn't have today (see the mapping table row above). **`"Devolución"` now exists as a selectable `TIPOS_TRANSACCION` value (2026-08-09)** — closes the "no equivalent tipo at all" gap, but the deeper modeling (bounced-pago linkage, auto recargo) is still not designed.
 - **Still open, blocking 2.5/2.7 implementation:** período-scoped vs. continuous `saldo_actual`, and `plazo_pago`/`descuento` values with no legacy precedent.
+- **Still open (flagged 2026-08-09, deliberately deferred by the user):** whether `"Devolución"` should get a balance-validation rule like `"Reembolso"`'s (can't exceed available pagos) — currently unrestricted. Also flagged, not yet scoped: a bank-initiated `cargo` (`REMESA`/`TRANSFERENCIA` — see `metodos_pago`) may need to exist as its own concept, separate from a manually-entered `cargo`.
 - Depended on: the user attaching the `.xlsm` file — **done**, analyzed 2026-08-08.
 
 ### 2.15c Second legacy workbook — club-wide accounting (not yet scoped)

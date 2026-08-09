@@ -15,6 +15,16 @@ _COLUMN_MIGRATIONS = [
     ("socios", "es_titular", "ALTER TABLE socios ADD COLUMN es_titular BOOLEAN DEFAULT 0"),
 ]
 
+# lowercase/legacy transacciones.tipo value -> canonical TIPOS_TRANSACCION
+# value (features/transactions/service.py) - see _normalize_tipo_transaccion.
+_TIPO_CANONICAL = {
+    "cargo": "Cargo",
+    "pago": "Pago",
+    "reembolso": "Reembolso",
+    "devolucion": "Devolución",
+    "devolución": "Devolución",
+}
+
 
 def _add_missing_columns() -> None:
     """Patch columns added to models.py after a DB already exists.
@@ -36,9 +46,41 @@ def _add_missing_columns() -> None:
                 logger.info("Migrated %s: added missing '%s' column.", table, column)
 
 
+def _normalize_tipo_transaccion() -> None:
+    """Normalize transacciones.tipo to canonical Title Case.
+
+    Older rows were written back when TIPOS_TRANSACCION was all-lowercase
+    ("cargo"/"pago"/"reembolso"), and some were entered inconsistently
+    outside the dialog's dropdown (e.g. a legacy import), leaving a mix of
+    casings in the same column. The dropdown itself now only ever writes
+    canonical values (see TIPOS_TRANSACCION), so this is a one-time-per-row
+    cleanup of pre-existing data, not an ongoing need - safe to call on
+    every startup, a no-op once every row already matches its canonical form.
+    """
+    with engine.connect() as conn:
+        columns = {row[1] for row in conn.execute(text("PRAGMA table_info(transacciones)"))}
+        if "tipo" not in columns:
+            return
+        for legacy, canonical in _TIPO_CANONICAL.items():
+            result = conn.execute(
+                text(
+                    "UPDATE transacciones SET tipo = :canonical "
+                    "WHERE LOWER(TRIM(tipo)) = :legacy AND tipo != :canonical"
+                ),
+                {"canonical": canonical, "legacy": legacy},
+            )
+            if result.rowcount:
+                conn.commit()
+                logger.info(
+                    "Normalized %d transacciones.tipo row(s) '%s' -> '%s'.",
+                    result.rowcount, legacy, canonical,
+                )
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
     _add_missing_columns()
+    _normalize_tipo_transaccion()
     seed_all()
     logger.info("Base de datos inicializada correctamente.")
 

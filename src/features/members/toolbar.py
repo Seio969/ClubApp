@@ -288,7 +288,7 @@ class MembersToolBar(QToolBar):
         self.service.export_members(rows, destination=None)
 
     def on_register_movements(self) -> None:
-        """Open TransactionDialog to register a cargo/pago/reembolso.
+        """Open TransactionDialog to register a Cargo/Pago/Reembolso/Devolución.
 
         This is the member-scoped shortcut decided in PLAN.md 2.4 (the
         "both entry points" navigation model): with exactly one member row
