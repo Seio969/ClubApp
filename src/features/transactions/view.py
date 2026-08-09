@@ -37,6 +37,7 @@ from .toolbar import TransactionsToolBar
 from .service import TIPOS_TRANSACCION, TransactionsService
 from features.members.column_fill import ensure_columns_fill as _ensure_columns_fill
 from features.members.table_sort import TableSortMixin
+from features.members.table_selection import capture_selected_id, restore_selected_id
 from ui.styles import MEMBERS_MENU_STYLESHEET
 from utils.logger import get_logger
 
@@ -152,6 +153,12 @@ class TransactionsView(QWidget, TableSortMixin):
                 pass
         return super().eventFilter(obj, ev)
 
+    def hideEvent(self, event) -> None:
+        """Clear the table selection whenever this screen stops being the
+        current widget - see MembersMenuView.hideEvent (PLAN.md 4.4)."""
+        self.table.clearSelection()
+        super().hideEvent(event)
+
     def ensure_columns_fill(self) -> None:
         _ensure_columns_fill(self.table, self.model)
 
@@ -188,8 +195,17 @@ class TransactionsView(QWidget, TableSortMixin):
         self._last_search_text = text
         tipo = self.tipo_filter.currentData()
         id_periodo = self.periodo_filter.currentData()
+
+        # Remember the selected row (by id_transaccion) so a plain reload
+        # re-selects the same movement afterwards; a header-click sort
+        # clears the selection explicitly instead (see table_sort.py).
+        selected_id = capture_selected_id(self.table, self.model)
+
         added = self._service.list_transactions(text, tipo=tipo, id_periodo=id_periodo, model=self.model)
         logger.info("TransactionsView.on_search: %d rows (tipo=%s, id_periodo=%s)", added, tipo, id_periodo)
+
+        restore_selected_id(self.table, self.model, selected_id)
+
         try:
             self.ensure_columns_fill()
         except Exception:

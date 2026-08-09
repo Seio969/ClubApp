@@ -28,6 +28,7 @@ from PySide6.QtCore import Qt, QEvent
 from .metodos_pago_toolbar import MetodosPagoToolBar
 from .metodos_pago_service import MetodosPagoService
 from features.members.column_fill import ensure_columns_fill as _ensure_columns_fill
+from features.members.table_selection import capture_selected_id, restore_selected_id
 from ui.styles import SETTINGS_MENU_STYLESHEET
 from utils.logger import get_logger
 
@@ -114,6 +115,12 @@ class MetodosPagoView(QWidget):
                 pass
         return super().eventFilter(obj, ev)
 
+    def hideEvent(self, event) -> None:
+        """Clear the table selection whenever this screen stops being the
+        current widget - see MembersMenuView.hideEvent (PLAN.md 4.4)."""
+        self.table.clearSelection()
+        super().hideEvent(event)
+
     def ensure_columns_fill(self) -> None:
         _ensure_columns_fill(self.table, self.model)
 
@@ -128,6 +135,7 @@ class MetodosPagoView(QWidget):
 
     def load_table_view(self) -> None:
         """Reload the metodos_pago table from the database."""
+        selected_id = capture_selected_id(self.table, self.model)
         metodos = self._service.list_metodos_pago()
         self.model.setRowCount(0)
         for metodo in metodos:
@@ -140,6 +148,7 @@ class MetodosPagoView(QWidget):
             for item in row:
                 item.setEditable(False)
             self.model.appendRow(row)
+        restore_selected_id(self.table, self.model, selected_id)
         try:
             self.ensure_columns_fill()
         except Exception:

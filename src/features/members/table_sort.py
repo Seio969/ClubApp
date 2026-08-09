@@ -69,8 +69,12 @@ class TableSortMixin:
 
         Cycle: (no sort) -> ASC -> DESC -> (no sort)
         Clicking a different column restarts the cycle on that column.
+
+        Always clears the current selection first (PLAN.md 4.4 decision:
+        sorting never preserves the selected row, unlike a plain reload).
         """
         try:
+            self.table.clearSelection()
             # Determine next state
             if self._sort_column is None or self._sort_column != index:
                 # New column selected -> start with ascending
