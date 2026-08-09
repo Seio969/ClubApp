@@ -100,19 +100,17 @@ class MembersMenuService:
                 item.setEditable(False)
             model.appendRow(items)
 
-    def search_members(self, text: str, model: Any, limit: Optional[int] = None) -> int:
+    def search_members(self, text: str, model: Any) -> int:
         """Query socios matching `text` and populate the provided model.
 
         Matches against numero_socio, nombre, apellidos and email,
         accent/case-insensitively. Empty `text` means "no filter" - every
-        socio is returned (subject to `limit`), which is also how the
-        default members table load (see MembersMenuView.load_table_view)
-        gets its data.
+        socio is returned, which is also how the default members table
+        load (see MembersMenuView.load_table_view) gets its data.
 
         Args:
             text: Search text to filter members. Empty/None = no filter.
             model: Qt model to populate with results
-            limit: Optional limit on number of rows to return
 
         Returns number of rows added.
         """
@@ -121,17 +119,10 @@ class MembersMenuService:
             return 0
 
         try:
-            if limit == 0:
-                limit = None
-
             rows = self._filter_socio_rows(self._fetch_socios_rows(), text)
-            if limit is not None:
-                rows = rows[:limit]
 
             self._populate_model(model, list(_SOCIO_COLUMNS), rows)
-            logger.info(
-                "MembersMenuService.search_members: %d rows for '%s' (limit: %s)", len(rows), text, limit
-            )
+            logger.info("MembersMenuService.search_members: %d rows for '%s'", len(rows), text)
             return len(rows)
         except Exception as exc:
             logger.exception("MembersMenuService.search_members: failed - %s", exc)

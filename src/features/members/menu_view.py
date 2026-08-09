@@ -1,7 +1,7 @@
 """Members menu view.
 
-Top bar holds: back button, search box, results limit, and a "Filtros"
-column-visibility menu. The old "Vistas" dropdown - which let this screen
+Top bar holds: back button, search box, and a "Filtros" column-visibility
+menu. The old "Vistas" dropdown - which let this screen
 browse any table in the DB via ViewRegistry's generic SELECT * dump - has
 been removed entirely (PLAN.md 2.16): Members only ever shows the socios
 table now, loaded through MembersMenuService's real query.
@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QLabel,
     QLineEdit,
     QPushButton,
     QToolButton,
@@ -30,7 +29,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QAbstractItemView,
 )
-from PySide6.QtGui import QStandardItemModel, QAction, QIntValidator
+from PySide6.QtGui import QStandardItemModel, QAction
 from PySide6.QtCore import Qt, QEvent
 from utils.logger import get_logger
 logger = get_logger(__name__)
@@ -117,32 +116,6 @@ class MembersMenuView(QWidget, TableSortMixin):
         # Use stretches to keep the search area visually centered between left and right groups
         top_layout.addStretch(1)
         top_layout.addWidget(center_group, 0, Qt.AlignmentFlag.AlignCenter)
-        
-        # Middle group: limit entry
-        middle_group = QWidget(top_bar)
-        middle_group.setObjectName("topMiddleGroup")
-        middle_layout = QHBoxLayout(middle_group)
-        middle_layout.setContentsMargins(0, 0, 0, 0)
-        middle_layout.setSpacing(6)
-
-        limit_label = QLabel("Límite:")
-        limit_label.setToolTip("Número máximo de resultados a mostrar")
-        middle_layout.addWidget(limit_label)
-
-        self.limit_input = QLineEdit(middle_group)
-        self.limit_input.setPlaceholderText("")
-        self.limit_input.setText("0")  # Default value
-        self.limit_input.setToolTip("Número máximo de resultados a mostrar (por defecto 100)")
-        self.limit_input.setMaximumWidth(80)
-        self.limit_input.setMinimumHeight(34)
-        self.limit_input.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        # Only allow numbers (0 means "no limit")
-        self.limit_input.setValidator(QIntValidator(0, 99999, self))
-        # Refresh view when Enter is pressed
-        self.limit_input.returnPressed.connect(self.on_limit_changed)
-        middle_layout.addWidget(self.limit_input)
-
-        top_layout.addWidget(middle_group, 0, Qt.AlignmentFlag.AlignCenter)
         top_layout.addStretch(1)
 
         # Right group: column-visibility filters. (The "Vistas" table
@@ -311,26 +284,6 @@ class MembersMenuView(QWidget, TableSortMixin):
             action.toggled.connect(lambda checked, idx=col: self.table.setColumnHidden(idx, not checked))
             self.filters_menu.addAction(action)
 
-    def get_limit(self) -> Optional[int]:
-        """Get the limit value from the limit input field.
-
-        Returns:
-            Optional[int]: The limit value. If the user enters 0 or leaves
-            the field empty/invalid, returns None which means "no limit".
-        """
-        try:
-            text = self.limit_input.text().strip()
-            if not text:
-                return None  # Empty means no limit
-            limit = int(text)
-            # 0 is treated as "no limit" per UI convention
-            if limit == 0:
-                return None
-            # Ensure within valid positive range
-            return max(1, min(limit, 99999))
-        except (ValueError, AttributeError):
-            return None  # Treat parse errors as "no limit"
-
     def on_search(self) -> None:
         """Perform a simple search using the text in the top bar input.
 
@@ -338,14 +291,13 @@ class MembersMenuView(QWidget, TableSortMixin):
         row containing the search text to show data flow.
         """
         text = self.search_input.text().strip()
-        limit = self.get_limit()
         # remember last search so clearing sort can re-run it
         self._last_search_text = text
-        logger.info("Buscar: '%s' con límite: %s", text, limit)
+        logger.info("Buscar: '%s'", text)
         # Same row-persists-across-reload rule as load_table_view() (PLAN.md 4.4).
         selected_id = capture_selected_id(self.table, self.model)
         # Delegate search/population to service
-        added = self._service.search_members(text, self.model, limit=limit)
+        added = self._service.search_members(text, self.model)
         logger.info("Search added %d rows", added)
         restore_selected_id(self.table, self.model, selected_id)
         # After populating the model, ensure columns fill the available width
@@ -353,18 +305,6 @@ class MembersMenuView(QWidget, TableSortMixin):
             self.ensure_columns_fill()
         except Exception:
             pass
-
-    def on_limit_changed(self) -> None:
-        """Handle when user presses Enter in the limit input field.
-
-        Reloads the members table with the new limit.
-        """
-        limit = self.get_limit()
-        logger.info("Límite cambiado a: %s", limit if limit is not None else 'sin límite')
-        try:
-            self.refresh_table()
-        except Exception as exc:
-            logger.exception("Error al refrescar tabla con nuevo límite: %s", exc)
 
     def load_table_view(self) -> None:
         """Reload the members table (socios) from the database.
@@ -376,14 +316,12 @@ class MembersMenuView(QWidget, TableSortMixin):
         removed entirely (PLAN.md 2.16); Members only ever shows socios now.
 
         Re-applies whatever text is currently in the search box rather than
-        always reloading everyone - this is also what "Refrescar" and
-        changing the límite field call (via refresh_table), so pressing
-        either one after searching stays scoped to that search instead of
-        silently discarding it.
+        always reloading everyone - this is also what "Refrescar" calls (via
+        refresh_table), so pressing it after searching stays scoped to that
+        search instead of silently discarding it.
         """
-        limit = self.get_limit()
         text = self.search_input.text().strip()
-        logger.info("Cargando socios con límite: %s (filtro: '%s')", limit, text)
+        logger.info("Cargando socios (filtro: '%s')", text)
 
         # Remember the selected row (by id_socio) so a plain reload - unlike
         # a header-click sort, which clears it explicitly (see table_sort.py)
@@ -393,8 +331,8 @@ class MembersMenuView(QWidget, TableSortMixin):
         # kept for TableSortMixin, which checks this before reloading on
         # sort-clear; always "socios" now that there's nothing else to load.
         self._current_view_name = "socios"
-        added = self._service.search_members(text, self.model, limit=limit)
-        logger.info("Cargados %d socios con límite %s (filtro: '%s')", added, limit, text)
+        added = self._service.search_members(text, self.model)
+        logger.info("Cargados %d socios (filtro: '%s')", added, text)
 
         # Refresh filters menu to match new columns
         self._populate_filters_menu()
