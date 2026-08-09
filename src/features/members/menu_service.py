@@ -50,15 +50,18 @@ class MembersMenuService:
     objects or return pure data that the UI can consume.
     """
 
-    def _fetch_socios_rows(self) -> List[tuple]:
-        """Return every Socio row as plain tuples, in `_SOCIO_COLUMNS` order.
+    def _fetch_socios_rows(self, include_inactive: bool = False) -> List[tuple]:
+        """Return Socio rows as plain tuples, in `_SOCIO_COLUMNS` order.
 
-        Deliberately does not filter by estado - deactivated members still
-        need to be searchable/visible here until estado-aware
-        filtering/display is built (PLAN.md 2.2).
+        By default only `estado="activo"` members are returned (PLAN.md 2.2
+        - hide inactive by default, with an opt-in toggle); pass
+        `include_inactive=True` to also return `inactivo` ones.
         """
         with get_session() as session:
-            socios = session.query(Socio).order_by(Socio.id_socio).all()
+            query = session.query(Socio)
+            if not include_inactive:
+                query = query.filter(Socio.estado == "activo")
+            socios = query.order_by(Socio.id_socio).all()
             rows = []
             for s in socios:
                 values = [getattr(s, col) for col in _SOCIO_COLUMNS]
@@ -100,17 +103,20 @@ class MembersMenuService:
                 item.setEditable(False)
             model.appendRow(items)
 
-    def search_members(self, text: str, model: Any) -> int:
+    def search_members(self, text: str, model: Any, include_inactive: bool = False) -> int:
         """Query socios matching `text` and populate the provided model.
 
         Matches against numero_socio, nombre, apellidos and email,
         accent/case-insensitively. Empty `text` means "no filter" - every
-        socio is returned, which is also how the default members table
-        load (see MembersMenuView.load_table_view) gets its data.
+        (matching-estado) socio is returned, which is also how the default
+        members table load (see MembersMenuView.load_table_view) gets its
+        data.
 
         Args:
             text: Search text to filter members. Empty/None = no filter.
             model: Qt model to populate with results
+            include_inactive: If False (default), `estado="inactivo"`
+                members are excluded (PLAN.md 2.2). Pass True to include them.
 
         Returns number of rows added.
         """
@@ -119,7 +125,7 @@ class MembersMenuService:
             return 0
 
         try:
-            rows = self._filter_socio_rows(self._fetch_socios_rows(), text)
+            rows = self._filter_socio_rows(self._fetch_socios_rows(include_inactive), text)
 
             self._populate_model(model, list(_SOCIO_COLUMNS), rows)
             logger.info("MembersMenuService.search_members: %d rows for '%s'", len(rows), text)

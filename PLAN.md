@@ -58,11 +58,10 @@ This document lists, by category, everything that's pending and proposes an exec
 - [x] Titular (primary holder) per `numero_socio` (2.17) — `Socio.es_titular`, auto-unset-other-titular-on-swap with a UI confirmation, forced titular on a brand-new `numero_socio`, `TransactionDialog`'s picker defaulting to titulares (non-titulares within a titular-having group stay searchable), the Registrar shortcut and the open picker both fully blocked for un-migrated `numero_socio` groups until an admin assigns a titular, `cambio_titular` audit-log rows. See `CLAUDE.md`'s `features/members/` and `features/transactions/` sections.
 - [x] Bug found while manually testing the above: `main.py` only called `init_db()` when `data/club_manager.db` didn't exist yet, so `_add_missing_columns()` never ran for anyone who already had a DB — `Socio.es_titular` (or any future added column) would silently never apply, crashing with `no such column` on first query instead of at startup. Fixed by calling `init_db()` unconditionally on every launch (it's fully idempotent/safe to do so). See `CLAUDE.md`'s `src/main.py` section.
 
-Everything below already has an ORM model declared in `models.py` but **zero UI and zero service logic**, except where noted above:
+**Completed** (branch `feat/estado-filter-inactive-members`):
+- [x] Estado-aware filtering for deactivated members (2.2) — `MembersMenuService.search_members`/`_fetch_socios_rows` hide `estado="inactivo"` socios by default; a "Mostrar inactivos" checkable action in the Members Filtros menu opts back in, re-running the query rather than hiding/showing a column.
 
-### 2.2 Deactivating members (not physical deletion)
-- Deactivation and its confirmation dialog are both done (see Completed block above).
-- **Still pending**: estado-aware filtering/display — today a deactivated member still shows up (now correctly marked `inactivo`) on the next reload since nothing filters by `estado` yet.
+Everything below already has an ORM model declared in `models.py` but **zero UI and zero service logic**, except where noted above:
 
 ### 2.5 Balance calculation and carry-over (`SaldoSocios`)
 - There's no service that computes `saldo_actual` from `saldo_anterior + cargos - pagos` (or similar), nor one that carries a balance from one period to the next when periods are closed/opened.
@@ -183,14 +182,15 @@ Tooling: `openpyxl` + `oletools` were installed into a **throwaway `uv venv`** i
 1. **File/Edit menu** in `menu_bar.py` — New/Open/Save and all of Edit (Undo/Redo/Cut/Copy/Paste) are deliberate `not_implemented` stubs. Confirm with the user which of these make real sense in a desktop management app (Save/Open probably don't apply to an app backed by a persistent SQLite DB; Undo/Redo could have real value for member-editing operations).
 2. **Periods, Reports screens** — don't exist yet, not even as a skeleton (`features/periods/`, `features/reports/` haven't been created). `features/members/`, `features/settings/`, and now `features/transactions/` (2.4, done) follow the per-domain folder pattern documented in `CLAUDE.md`. `features/calendar/` (2.18) is the same story, but deliberately last — see below.
 3. **Overall visual/UI polish.** Bug 1.2 covers one specific rendering defect (the broken QSS header-color rule), but there's no wider design work planned yet: today the app is three hand-written QSS strings (`MAIN_MENU_STYLESHEET`, `MEMBERS_MENU_STYLESHEET`, `SETTINGS_MENU_STYLESHEET` in `styles.py` — the latter two already near-duplicates of each other) plus Qt's built-in `QStyle.SP_*` stock icons (no custom icon set, no consistent spacing/typography system, no light/dark theme, no design tokens). **Decided**: no specific reference given — Claude proposed a clean, modern look (palette, spacing, icons) for approval before wider rollout; see [`UI_PROPOSAL.md`](UI_PROPOSAL.md) for the full audit and design direction (token layer, unified ledger palette, `qtawesome` icons, extracted shared table/toolbar composition for future screens).
-4. **Table row selection doesn't survive navigating away and back.** Reported by the user: selecting a row in a grid (Members, Transacciones, Métodos de pago, Reglas de cobro), then clicking outside the table or navigating away (e.g. "Volver" back to the main menu) and returning to the same screen, loses the selection — the row shows unselected again instead of staying selected. Root cause is almost certainly that every screen's `load_table_view()`/`refresh_table()` rebuilds the `QStandardItemModel` from scratch (`removeRows` + `appendRow` for every row), which discards the `QItemSelectionModel`'s selection since it's keyed to model indices that no longer exist after rebuild — same class of problem `TableSortMixin` already solves for sort state, just not yet done for selection.
-   - **Two implementation attempts were tried and explicitly rejected by the user (2026-08-09), both reverted via `git reset`/force-push — do not repeat either without re-confirming first:** (a) remembering the selected row's stable id across a reload and re-selecting it afterward (the original literal reading of this item); (b) clearing the selection whenever the table loses keyboard focus (`QEvent.Type.FocusOut`) — the user's own restated description of the bug ("when I press the header, the selector preserves, I don't want that; when I click out of the grid I want to reset the selector"), confirmed safe for toolbar actions (`QToolButton`s default to `focusPolicy=NoFocus`, so Editar/Eliminar clicks don't themselves clear the selection first) but reverted anyway. The exact desired end behavior is still unresolved — get explicit sign-off on the specific rule before implementing again.
 
 **Completed** (branch `chore/remove-members-limit-control`):
 - [x] "Límite" row-limit control removed from Members screen (4.6)
 
 **Completed** (branch `feat/live-incremental-search`):
 - [x] Live/incremental search wired for Members and Transacciones (4.5)
+
+**Completed** (branch `fix/table-selection-persistence`, PR #20):
+- [x] Table row selection persists across a plain reload (re-selects the same row by id), clears on header-click sort, and clears on navigating away from the screen (4.4)
 
 ---
 
@@ -199,21 +199,19 @@ Tooling: `openpyxl` + `oletools` were installed into a **throwaway `uv venv`** i
 **Done** (steps that drove the original ordering — kept here only as a progress marker, see §1/§2's own Completed blocks for detail): quick bugs from the original audit, minimal testing infrastructure, Members CRUD completion, seed data + Settings (incl. database reset), the transactions module minus balance recalculation, titular per `numero_socio` (2.17), the numeric validator scientific-notation fix, and non-editable grid cells + a Refrescar/search-filter bug fix (§1).
 
 **Next up — small, independent, unblocked fixes.** None of these need the still-open business-rule decisions below, so they're cheaper to clear now than to leave sitting alongside blocked work:
-1. **Table selection persistence** (4.4) — still unresolved; see §4 item 4's note on two rejected attempts before trying again.
-2. **Estado-aware filtering for deactivated members** (2.2) — decide and implement how inactive members are handled on reload (today they silently reappear, just correctly marked `inactivo`). A user question on the exact default (hide vs. show-distinguished vs. Filtros-menu option) went unanswered — ask again before implementing.
-3. **Audit log viewer** (2.12) — `logs` is still the one table with no assigned screen; needs a location decision (tab under Settings vs. a small `features/audit/` screen) before building.
+1. **Audit log viewer** (2.12) — `logs` is still the one table with no assigned screen; needs a location decision (tab under Settings vs. a small `features/audit/` screen) before building.
 
 **Then — gated on user decisions, not on any remaining code:**
-6. **Balance calculation and Periods** (2.5, 2.6) — 2.15b's `.xlsm` analysis is done, but implementation is still blocked on resolving what it surfaced: período-scoped vs. continuous `saldo_actual`, devolución-vs-reembolso modeling, and `plazo_pago`/`descuento` values with no legacy precedent. A full Periods management screen is still unbuilt.
-7. **Business-standard test scenarios** (3.8) — once the rules they encode (2.4 done, 2.5/2.6 pending, 2.7 done) actually exist end-to-end.
+2. **Balance calculation and Periods** (2.5, 2.6) — 2.15b's `.xlsm` analysis is done, but implementation is still blocked on resolving what it surfaced: período-scoped vs. continuous `saldo_actual`, devolución-vs-reembolso modeling, and `plazo_pago`/`descuento` values with no legacy precedent. A full Periods management screen is still unbuilt.
+3. **Business-standard test scenarios** (3.8) — once the rules they encode (2.4 done, 2.5/2.6 pending, 2.7 done) actually exist end-to-end.
 
 **Then — larger, independent features:**
-8. **Reports + export** (2.8), then **charts/statistics** (2.9).
-9. **Backups** (2.10) and **import** (2.11) — can be tackled in parallel or at the end.
-10. **Long-term non-functionals**: Alembic (a technical prerequisite — move it earlier if the schema starts changing a lot), encryption (2.13), Postgres migration (2.14).
-11. **Visual/UI polish broader pass** (4.3) — the token layer/`qtawesome` icons/shared "data screen" composition extraction from `UI_PROPOSAL.md`, distinct from the targeted fixes above; best done once transactions/periods/reports screens exist so styling isn't reworked twice.
-12. **Second legacy workbook analysis** (2.15c) — deliberately deferred by the user; pick up whenever prioritized, independent of everything else in this list.
-13. **Calendar** (2.18) — main-menu "📅 Calendario" screen for events/reminders, with email reminders to socios as a later follow-up. **Deliberately the very last item in this entire plan**, per explicit user instruction (2026-08-09) — not to be pulled forward ahead of anything else above, even if it looks small/independent enough to slot in earlier.
+4. **Reports + export** (2.8), then **charts/statistics** (2.9).
+5. **Backups** (2.10) and **import** (2.11) — can be tackled in parallel or at the end.
+6. **Long-term non-functionals**: Alembic (a technical prerequisite — move it earlier if the schema starts changing a lot), encryption (2.13), Postgres migration (2.14).
+7. **Visual/UI polish broader pass** (4.3) — the token layer/`qtawesome` icons/shared "data screen" composition extraction from `UI_PROPOSAL.md`, distinct from the targeted fixes above; best done once transactions/periods/reports screens exist so styling isn't reworked twice.
+8. **Second legacy workbook analysis** (2.15c) — deliberately deferred by the user; pick up whenever prioritized, independent of everything else in this list.
+9. **Calendar** (2.18) — main-menu "📅 Calendario" screen for events/reminders, with email reminders to socios as a later follow-up. **Deliberately the very last item in this entire plan**, per explicit user instruction (2026-08-09) — not to be pulled forward ahead of anything else above, even if it looks small/independent enough to slot in earlier.
 
 ---
 
