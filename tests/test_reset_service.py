@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from database.models import Log, MetodoPago, Periodo, ReglaCobro, SaldoSocios, Socio, Transaccion
 from database.seed_db import METODOS_PAGO_FIJOS, seed_metodos_pago
-from features.settings.reset_service import ResetService
+from features.settings.reset.service import ResetService
 
 
 def _seed_full_dataset(test_engine) -> dict:

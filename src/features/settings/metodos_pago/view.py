@@ -1,7 +1,9 @@
-"""Reglas de cobro screen - one section reachable from the Settings hub.
+"""Métodos de pago screen - one section reachable from the Settings hub.
 
-Same "small grid, no search/sort" shape as MetodosPagoView -
-UI_PROPOSAL.md's guidance for this screen applies here too.
+Unlike Members' screen, this table has a handful of rows at most (5 fixed
+methods plus whatever custom ones the club adds), so there's no
+search/sort composition here - just a table and a toolbar, per
+UI_PROPOSAL.md's "small grids" guidance for this screen.
 """
 
 from __future__ import annotations
@@ -23,8 +25,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt, QEvent
 
-from .reglas_cobro_toolbar import ReglasCobroToolBar
-from .reglas_cobro_service import ReglasCobroService
+from .toolbar import MetodosPagoToolBar
+from .service import MetodosPagoService
 from features.members.column_fill import ensure_columns_fill as _ensure_columns_fill
 from features.members.table_selection import capture_selected_id, restore_selected_id
 from ui.styles import SETTINGS_MENU_STYLESHEET
@@ -32,10 +34,10 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-_HEADERS = ["ID", "Descripción", "Cuota mensual", "Plazo (días)", "Penalización", "Descuento", "Estado"]
+_HEADERS = ["ID", "Nombre", "Estado", "Tipo"]
 
 
-class ReglasCobroView(QWidget):
+class MetodosPagoView(QWidget):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("settingsMenu")
@@ -59,7 +61,7 @@ class ReglasCobroView(QWidget):
         back_button.clicked.connect(self.on_back_to_settings)
         top_layout.addWidget(back_button, 0, Qt.AlignmentFlag.AlignLeft)
 
-        title = QLabel("Reglas de cobro")
+        title = QLabel("Métodos de pago")
         title.setObjectName("screenTitle")
         top_layout.addWidget(title, 0, Qt.AlignmentFlag.AlignCenter)
         top_layout.addStretch(1)
@@ -67,7 +69,7 @@ class ReglasCobroView(QWidget):
         main_layout.addWidget(top_bar)
 
         # --- Toolbar -----------------------------------------------------
-        self.toolbar = ReglasCobroToolBar(self)
+        self.toolbar = MetodosPagoToolBar(self)
         main_layout.addWidget(self.toolbar)
 
         # --- Table ---------------------------------------------------------
@@ -83,11 +85,11 @@ class ReglasCobroView(QWidget):
 
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        header.setDefaultSectionSize(120)
+        header.setDefaultSectionSize(140)
         header.setStretchLastSection(False)
 
         self.toolbar.set_table_references(self.table, self.model)
-        self._service = ReglasCobroService()
+        self._service = MetodosPagoService()
 
         main_layout.addWidget(self.table)
 
@@ -96,7 +98,7 @@ class ReglasCobroView(QWidget):
         try:
             self.load_table_view()
         except Exception:
-            logger.exception("ReglasCobroView.__init__: initial load_table_view failed")
+            logger.exception("MetodosPagoView.__init__: initial load_table_view failed")
 
         try:
             self.ensure_columns_fill()
@@ -123,25 +125,25 @@ class ReglasCobroView(QWidget):
         _ensure_columns_fill(self.table, self.model)
 
     def on_back_to_settings(self) -> None:
+        """Return to the Settings hub (not the main menu directly - this
+        screen is nested one level under Ajustes, same as any other
+        settings section)."""
         if self.main_window and hasattr(self.main_window, "_stack") and hasattr(self.main_window, "_settings_view"):
             self.main_window._stack.setCurrentWidget(self.main_window._settings_view)
         else:
-            logger.warning("ReglasCobroView.on_back_to_settings: no se pudo navegar a Ajustes")
+            logger.warning("MetodosPagoView.on_back_to_settings: no se pudo navegar a Ajustes")
 
     def load_table_view(self) -> None:
-        """Reload the reglas_cobro table from the database."""
+        """Reload the metodos_pago table from the database."""
         selected_id = capture_selected_id(self.table, self.model)
-        reglas = self._service.list_reglas_cobro()
+        metodos = self._service.list_metodos_pago()
         self.model.setRowCount(0)
-        for regla in reglas:
+        for metodo in metodos:
             row = [
-                QStandardItem(str(regla["id_regla"])),
-                QStandardItem(regla["descripcion"] or ""),
-                QStandardItem(_fmt(regla["cuota_mensual"])),
-                QStandardItem(_fmt(regla["plazo_pago"])),
-                QStandardItem(_fmt(regla["penalizacion"])),
-                QStandardItem(_fmt(regla["descuento"])),
-                QStandardItem(regla["estado"] or "activo"),
+                QStandardItem(str(metodo["id_metodo"])),
+                QStandardItem(metodo["nombre"]),
+                QStandardItem(metodo["estado"] or "activo"),
+                QStandardItem("Fijo" if metodo["fijo"] else "Personalizado"),
             ]
             for item in row:
                 item.setEditable(False)
@@ -156,25 +158,21 @@ class ReglasCobroView(QWidget):
         try:
             self.load_table_view()
         except Exception as exc:
-            logger.exception("ReglasCobroView.refresh_table: failed - %s", exc)
+            logger.exception("MetodosPagoView.refresh_table: failed - %s", exc)
 
 
-def _fmt(value) -> str:
-    return "" if value is None else str(value)
-
-
-def show_reglas_cobro_view(main_window) -> None:
-    """Ensure a ReglasCobroView exists in the application's central stack
+def show_metodos_pago_view(main_window) -> None:
+    """Ensure a MetodosPagoView exists in the application's central stack
     and make it the current widget - same singleton pattern as
     features.members.menu_view.show_members_view.
     """
     if main_window is None:
         raise ValueError("main_window is required")
 
-    rv = getattr(main_window, "_reglas_cobro_view", None)
-    if rv is None:
-        rv = ReglasCobroView(main_window)
-        main_window._reglas_cobro_view = rv
-        main_window._stack.addWidget(rv)
+    mv = getattr(main_window, "_metodos_pago_view", None)
+    if mv is None:
+        mv = MetodosPagoView(main_window)
+        main_window._metodos_pago_view = mv
+        main_window._stack.addWidget(mv)
 
-    main_window._stack.setCurrentWidget(rv)
+    main_window._stack.setCurrentWidget(mv)

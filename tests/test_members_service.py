@@ -1,5 +1,5 @@
 """Tests for MembersService's write paths (toolbar_service.py):
-add_member, get_member/update_member and delete_members.
+add_member, get_member/update_member and set_socio_estado.
 
 All of these use database.session.get_session(), which the test_engine
 fixture points at an isolated per-test SQLite DB instead of
@@ -182,29 +182,24 @@ class TestUpdateMember:
             assert session.query(Log).count() == 0
 
 
-class TestDeleteMembers:
-    def test_deactivates_and_returns_row(self, test_engine):
+class TestSetSocioEstado:
+    def test_deactivates_and_reactivates(self, test_engine):
         service = MembersService()
         new_id = service.add_member(_valid_socio_data())
 
-        def model_getter(row, col):
-            return str(new_id)
-
-        removed = service.delete_members([0], model_getter)
-
-        assert removed == [0]
+        assert service.set_socio_estado(new_id, "inactivo") is True
         with Session(test_engine) as session:
-            socio = session.get(Socio, new_id)
-            assert socio.estado == "inactivo"
+            assert session.get(Socio, new_id).estado == "inactivo"
+
+        assert service.set_socio_estado(new_id, "activo") is True
+        with Session(test_engine) as session:
+            assert session.get(Socio, new_id).estado == "activo"
 
     def test_creates_audit_log_row(self, test_engine):
         service = MembersService()
         new_id = service.add_member(_valid_socio_data())
 
-        def model_getter(row, col):
-            return str(new_id)
-
-        service.delete_members([0], model_getter)
+        service.set_socio_estado(new_id, "inactivo")
 
         with Session(test_engine) as session:
             logs = session.query(Log).filter_by(accion="desactivar").all()
@@ -214,27 +209,9 @@ class TestDeleteMembers:
             assert logs[0].id_registro_afectado == new_id
             assert "1001" in logs[0].descripcion_cambio
 
-    def test_empty_selection_returns_empty_and_logs_nothing(self, test_engine):
+    def test_returns_false_for_unknown_id(self, test_engine):
         service = MembersService()
 
-        removed = service.delete_members([], lambda row, col: "1")
-
-        assert removed == []
-        with Session(test_engine) as session:
-            assert session.query(Log).count() == 0
-
-    def test_no_model_getter_returns_empty(self, test_engine):
-        service = MembersService()
-
-        removed = service.delete_members([0], None)
-
-        assert removed == []
-
-    def test_unknown_id_socio_is_skipped_without_log(self, test_engine):
-        service = MembersService()
-
-        removed = service.delete_members([0], lambda row, col: "999")
-
-        assert removed == []
+        assert service.set_socio_estado(999, "inactivo") is False
         with Session(test_engine) as session:
             assert session.query(Log).count() == 0

@@ -13,7 +13,7 @@ import decimal
 from sqlalchemy.orm import Session
 
 from database.models import Log, ReglaCobro
-from features.settings.reglas_cobro_service import ReglasCobroService
+from features.settings.reglas_cobro.service import ReglasCobroService
 
 
 def _valid_regla_data(**overrides) -> dict:

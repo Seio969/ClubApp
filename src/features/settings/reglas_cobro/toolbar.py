@@ -11,8 +11,8 @@ from PySide6.QtGui import QStandardItemModel
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QWidget
 
-from .reglas_cobro_service import ReglasCobroService
-from .reglas_cobro_dialog import ReglaCobroDialog
+from .service import ReglasCobroService
+from .dialog import ReglaCobroDialog
 from utils.logger import get_logger
 
 logger = get_logger(__name__)

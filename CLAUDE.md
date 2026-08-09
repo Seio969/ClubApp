@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Desktop management app ("Club Social Paraiso") for a club's members and finances: member records, dues/payments/refunds, per-period balances, and reporting. Built with **PySide6** (Qt) for the UI, **SQLAlchemy** ORM over **SQLite** for persistence. Domain/UI text and identifiers are in Spanish (Socio = member, Transaccion = transaction, Periodo = period, etc.) — match this convention when adding new domain code.
 
-The app is early-stage: the "Gestionar Miembros" (members) screen, a "🧾 Transacciones" screen, and a "⚙️ Ajustes" (settings) hub are wired up from the main menu. Within Members, member CRUD (search, create, edit, deactivate) is fully implemented and audit-logged; export remains a logging placeholder (see [architecture/members.md](architecture/members.md)) — transaction-registration ("Registrar") is real, opening the shared `TransactionDialog`. Within Ajustes, payment methods (`metodos_pago`) and billing rules (`reglas_cobro`) both have full CRUD, and a database reset action (full wipe + scoped reset) exists. Transactions (charges/pagos/reembolsos) have full CRUD-minus-edit (create + browse, no update/delete) with integrity validation, but balance calculation (`SaldoSocios`) and period management (`Periodo`) beyond a minimal quick-create are still unbuilt. Reports don't exist yet.
+The app is early-stage: the "Gestionar Miembros" (members) screen, a "🧾 Transacciones" screen, and a "⚙️ Ajustes" (settings) hub are wired up from the main menu. Within Members, member CRUD (search, create, edit, deactivate) is fully implemented and audit-logged; export remains a logging placeholder (see [architecture/members.md](architecture/members.md)) — transaction-registration ("Registrar") is real, opening the shared `TransactionDialog`. Within Ajustes, payment methods (`metodos_pago`) and billing rules (`reglas_cobro`) both have full CRUD, a read-only audit log viewer ("🗂️ Registro de auditoría") exists, and a database reset action (full wipe + scoped reset) exists. Transactions (charges/pagos/reembolsos) have full CRUD-minus-edit (create + browse, no update/delete) with integrity validation, but balance calculation (`SaldoSocios`) and period management (`Periodo`) beyond a minimal quick-create are still unbuilt. Reports don't exist yet.
 
 See [README.md](README.md) for the full functional/non-functional requirements spec (in Spanish), [db.md](db.md) for a mermaid ER diagram of the *intended* schema (note: it has drifted from the actual code — see "Schema drift" in [architecture/database.md](architecture/database.md)), and [PLAN.md](PLAN.md) for the current task backlog.
 
@@ -52,9 +52,9 @@ src/
   features/
     members/
       menu_service.py          # real search/query logic for the members screen (socios only)
-      toolbar_service.py       # CRUD logic for the members toolbar (add/get/update/delete, all audit-logged)
+      toolbar_service.py       # CRUD logic for the members toolbar (add/get/update/set_socio_estado, all audit-logged)
       menu_view.py              # the members screen (search bar, filtros, table)
-      toolbar.py                 # QToolBar with Nuevo/Editar/Eliminar/Refrescar/Exportar/Registrar
+      toolbar.py                 # QToolBar with Nuevo/Editar/Activar/Desactivar/Refrescar/Exportar/Registrar
       dialog.py                   # add/edit member dialog (one class, edit mode via initial_data)
       column_fill.py               # table column-width-fill helper
       table_sort.py                 # 3-state header-click sort mixin
@@ -64,11 +64,11 @@ src/
       toolbar.py                    # Nuevo movimiento/Refrescar/Exportar - no Editar/Eliminar
       view.py                        # standalone Transacciones screen (search + tipo + periodo filters)
     settings/
-      menu_view.py              # Ajustes hub: section buttons -> metodos_pago / reglas_cobro / reset
-      metodos_pago_*.py           # MetodosPagoService/Dialog/Toolbar/View - CRUD, fixed methods protected from rename/delete
-      reglas_cobro_*.py           # ReglasCobroService/Dialog/Toolbar/View - CRUD, no fixed set, every field editable
-      reset_service.py           # ResetService - full_reset()/scoped_reset()
-      reset_view.py               # type-to-confirm UI for both reset operations
+      menu_view.py              # Ajustes hub: section buttons -> metodos_pago / reglas_cobro / audit_log / reset
+      metodos_pago/                # service.py/dialog.py/toolbar.py/view.py - MetodosPagoService etc, CRUD, fixed methods protected from rename/delete
+      reglas_cobro/                # service.py/dialog.py/toolbar.py/view.py - ReglasCobroService etc, CRUD, no fixed set, every field editable
+      audit_log/                   # service.py/view.py - AuditLogService (read-only Log queries) + AuditLogView ("Registro de auditoría" grid, logs' assigned screen)
+      reset/                       # service.py/view.py - ResetService.full_reset()/scoped_reset() + type-to-confirm UI for both
   ui/
     styles.py                  # shared QSS stylesheet strings
     main_window.py              # QMainWindow + QStackedWidget shell
@@ -92,6 +92,6 @@ These are the cross-cutting rules most likely to cause a real bug or a re-litiga
 - **`db.sql`/`db.md` are stale**, manually-maintained dumps that no longer match `models.py` (e.g. a `forma_pago` column and `transacciones.estado` that don't exist in code). `models.py` is the sole source of truth — never derive code from the docs.
 - **Every write service records an audit `Log` row** via `database/audit.py`'s `record_log()`, inside the same `get_session()` transaction as the write it documents (`ResetService.full_reset()` is the one necessary exception, since it drops the `logs` table itself). Writes not attributable to a member pass `id_socio=None`. Follow this pattern for any new write service.
 - **Gotcha:** never do `from database.session import engine` (or `SessionLocal`) at module import time in code that needs the raw engine (e.g. `drop_all`/`create_all`) — import inside the function body, or `tests/conftest.py`'s DB-patching fixture won't apply and the code will silently touch the real DB during tests.
-- **Table → screen ownership is a deliberate per-table decision**, not a generic browser (`common/view_registry.py` is kept as unused plumbing, not wired to any screen — see [architecture/database.md](architecture/database.md) before reaching for it). `logs` is the one table still without an assigned screen.
-- **Single-row-only editing**: every "Editar" action (Members, Métodos de pago, Reglas de cobro) refuses with an info message if more than one row is selected, rather than silently editing the first. Every "Eliminar"/deactivate action requires an explicit confirmation dialog naming the affected row(s) — never a silent/direct path.
+- **Table → screen ownership is a deliberate per-table decision**, not a generic browser (`common/view_registry.py` is kept as unused plumbing, not wired to any screen — see [architecture/database.md](architecture/database.md) before reaching for it). Every table now has an assigned screen — `logs`' is the Settings hub's "🗂️ Registro de auditoría" section (`AuditLogView`/`AuditLogService`), a filterable grid rather than a narrative timeline, reusing the same search/filter/table composition every other grid screen uses.
+- **Single-row-only editing**: every "Editar" action (Members, Métodos de pago, Reglas de cobro) refuses with an info message if more than one row is selected, rather than silently editing the first. All three screens instead batch-select for "Activar"/"Desactivar" (Members, Métodos de pago, Reglas de cobro all share this exact toolbar shape — see `_set_estado_for_selection` in each `toolbar.py`); "Desactivar" always requires an explicit confirmation dialog naming the affected row(s) — never a silent/direct path — while "Activar" doesn't (reactivating isn't destructive). Rows already in the target estado are silently skipped rather than erroring.
 - **Feature folders**: a new domain (periods, reports) gets its own `features/<domain>/` package (view+toolbar+dialog+service together), not flat files under a shared `services/` layer.

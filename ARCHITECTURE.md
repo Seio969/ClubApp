@@ -6,7 +6,7 @@ Index into this codebase's per-file/per-class architecture reference. [CLAUDE.md
 |---|---|
 | [architecture/database.md](architecture/database.md) | `src/config.py`, `src/main.py`, everything under `src/database/` (models, session, audit, seed_db, init_db, schema drift), `src/common/view_registry.py` |
 | [architecture/members.md](architecture/members.md) | `src/features/members/` (menu_service, toolbar_service, menu_view, toolbar, dialog) — the Members screen |
-| [architecture/settings.md](architecture/settings.md) | `src/features/settings/` (menu_view hub, metodos_pago_*, reglas_cobro_*, reset_*) — the Ajustes hub |
+| [architecture/settings.md](architecture/settings.md) | `src/features/settings/` (menu_view hub, plus the metodos_pago/, reglas_cobro/, reset/ and audit_log/ subpackages) — the Ajustes hub |
 | [architecture/transactions.md](architecture/transactions.md) | `src/features/transactions/` (service, dialog, toolbar, view) — Transacciones screen + the Members "Registrar" shortcut's backing service |
 | [architecture/ui-and-utils.md](architecture/ui-and-utils.md) | `src/ui/` (styles, main_window, menu_bar, main_menu_widget) and `src/utils/` (logger, exporters) |
 | [architecture/testing.md](architecture/testing.md) | `tests/` — fixture gotchas and current coverage map |
