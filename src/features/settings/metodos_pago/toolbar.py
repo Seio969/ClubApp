@@ -11,8 +11,8 @@ from PySide6.QtGui import QStandardItemModel
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QWidget
 
-from .metodos_pago_service import MetodosPagoService
-from .metodos_pago_dialog import MetodoPagoDialog
+from .service import MetodosPagoService
+from .dialog import MetodoPagoDialog
 from utils.logger import get_logger
 
 logger = get_logger(__name__)

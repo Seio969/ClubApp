@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QStandardItemModel
 from PySide6.QtCore import Qt, QEvent, QTimer
 
-from .audit_log_service import AuditLogService
+from .service import AuditLogService
 from features.members.column_fill import ensure_columns_fill as _ensure_columns_fill
 from features.members.table_sort import TableSortMixin
 from features.members.table_selection import capture_selected_id, restore_selected_id

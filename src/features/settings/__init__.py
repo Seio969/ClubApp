@@ -1,16 +1,17 @@
-"""Settings feature: a hub screen (Ajustes) plus one package per section.
+"""Settings feature: a hub screen (Ajustes) plus one subpackage per section.
 
-metodos_pago, reglas_cobro and reset each get their own view (plus
-toolbar/dialog/service where relevant), following the same per-section
-file naming.
+metodos_pago, reglas_cobro, reset and audit_log each get their own
+subpackage (view.py plus toolbar.py/dialog.py/service.py where relevant),
+keeping each section's files grouped together instead of flat-named.
 """
 
 from .menu_view import SettingsView, show_settings_view
-from .metodos_pago_view import MetodosPagoView, show_metodos_pago_view
-from .metodos_pago_toolbar import MetodosPagoToolBar
-from .reglas_cobro_view import ReglasCobroView, show_reglas_cobro_view
-from .reglas_cobro_toolbar import ReglasCobroToolBar
-from .reset_view import ResetView, show_reset_view
+from .metodos_pago.view import MetodosPagoView, show_metodos_pago_view
+from .metodos_pago.toolbar import MetodosPagoToolBar
+from .reglas_cobro.view import ReglasCobroView, show_reglas_cobro_view
+from .reglas_cobro.toolbar import ReglasCobroToolBar
+from .reset.view import ResetView, show_reset_view
+from .audit_log.view import AuditLogView, show_audit_log_view
 
 __all__ = [
     "SettingsView",
@@ -23,4 +24,6 @@ __all__ = [
     "ReglasCobroToolBar",
     "ResetView",
     "show_reset_view",
+    "AuditLogView",
+    "show_audit_log_view",
 ]

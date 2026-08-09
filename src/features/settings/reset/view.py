@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from .reset_service import ResetService
+from .service import ResetService
 from ui.styles import SETTINGS_MENU_STYLESHEET
 from utils.logger import get_logger
 

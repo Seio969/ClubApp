@@ -1,12 +1,13 @@
 """Members toolbar component.
 
 This module provides a specialized toolbar for the members view with
-actions for creating, editing, deleting, refreshing, and exporting member data.
+actions for creating, editing, activating/deactivating, refreshing, and
+exporting member data.
 """
 
 from __future__ import annotations
 
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional, Tuple, TYPE_CHECKING
 
 from PySide6.QtWidgets import QToolBar, QStyle, QTableView, QMessageBox
 from PySide6.QtCore import QSize
@@ -21,6 +22,13 @@ from features.transactions.dialog import TransactionDialog
 from features.transactions.service import TransactionsService
 from utils.logger import get_logger
 logger = get_logger(__name__)
+
+# Column indices in the members table model (see MembersMenuService's
+# _SOCIO_COLUMNS - id_socio/numero_socio/nombre/apellidos/.../estado/...).
+COL_ID = 0
+COL_NOMBRE = 2
+COL_APELLIDOS = 3
+COL_ESTADO = 7
 
 
 class MembersToolBar(QToolBar):
@@ -60,11 +68,17 @@ class MembersToolBar(QToolBar):
         act_edit.setToolTip("Editar miembro seleccionado")
         act_edit.triggered.connect(self.on_edit_member)
 
-        # Delete action
-        icon_delete = self.style().standardIcon(QStyle.SP_TrashIcon)
-        act_delete = self.addAction(icon_delete, "Eliminar")
-        act_delete.setToolTip("Eliminar miembro seleccionado")
-        act_delete.triggered.connect(self.on_delete_member)
+        # Activate / deactivate (soft-delete) actions - same
+        # Activar/Desactivar pattern as MetodosPagoToolBar/ReglasCobroToolBar.
+        icon_activate = self.style().standardIcon(QStyle.SP_DialogYesButton)
+        act_activate = self.addAction(icon_activate, "Activar")
+        act_activate.setToolTip("Activar los miembros seleccionados")
+        act_activate.triggered.connect(self.on_activate_members)
+
+        icon_deactivate = self.style().standardIcon(QStyle.SP_DialogNoButton)
+        act_deactivate = self.addAction(icon_deactivate, "Desactivar")
+        act_deactivate.setToolTip("Desactivar los miembros seleccionados")
+        act_deactivate.triggered.connect(self.on_deactivate_members)
 
         self.addSeparator()
 
@@ -163,56 +177,88 @@ class MembersToolBar(QToolBar):
             except Exception as exc:
                 logger.exception("MembersToolBar.on_edit_member: refresh_table failed - %s", exc)
 
-    def on_delete_member(self) -> None:
-        """Handle delete member action (deactivates the member, never a physical delete)."""
-        if self.table is None:
-            self.service.delete_members([])
-            return
-        sel = self.table.selectionModel().selectedRows()
-        indices = [s.row() for s in sel] if sel else []
-        if not indices:
-            QMessageBox.information(self, "Eliminar miembro", "Seleccione uno o más miembros para eliminar.")
-            return
+    def on_activate_members(self) -> None:
+        self._set_estado_for_selection("activo")
 
-        if not self._confirm_deactivation(indices):
-            return
+    def on_deactivate_members(self) -> None:
+        self._set_estado_for_selection("inactivo")
 
-        def model_getter(row: int, col: int):
-            if self.model is None:
-                return None
-            return self.model.item(row, col)
+    def _resolve_selected_rows(self) -> List[Tuple[int, str, str]]:
+        """Resolve every selected row to (id_socio, nombre_completo, estado_actual)."""
+        if self.table is None or self.model is None:
+            return []
+        resolved: List[Tuple[int, str, str]] = []
+        for index in self.table.selectionModel().selectedRows():
+            row = index.row()
+            id_item = self.model.item(row, COL_ID)
+            nombre_item = self.model.item(row, COL_NOMBRE)
+            apellidos_item = self.model.item(row, COL_APELLIDOS)
+            estado_item = self.model.item(row, COL_ESTADO)
+            try:
+                id_socio = int(id_item.text()) if id_item is not None else None
+            except (ValueError, AttributeError):
+                id_socio = None
+            if id_socio is None:
+                logger.warning("MembersToolBar: could not resolve id_socio for row=%s", row)
+                continue
+            parts = [item.text() for item in (nombre_item, apellidos_item) if item is not None and item.text()]
+            nombre_completo = " ".join(parts).strip() or f"fila {row}"
+            estado_actual = estado_item.text() if estado_item is not None else "activo"
+            resolved.append((id_socio, nombre_completo, estado_actual))
+        return resolved
 
-        rows_to_remove = self.service.delete_members(indices, model_getter)
-        # Rows returned here were already deactivated (estado="inactivo") in
-        # the database; remove them from the in-memory model for immediate
-        # feedback.
-        if self.model is not None and rows_to_remove:
-            for r in rows_to_remove:
-                self.model.removeRow(r)
+    def _set_estado_for_selection(self, nuevo_estado: str) -> None:
+        """Activate or deactivate every selected member, in a single batch.
 
-    def _confirm_deactivation(self, rows: List[int]) -> bool:
-        """Ask the user to confirm deactivating the given selected rows.
-
-        Never a physical delete - just estado="inactivo" - but it now
-        persists to the real DB (PLAN.md 1's soft-delete fix), so it's
-        worth a confirmation step before it fires (PLAN.md 2.2/4.4).
+        Rows already in the target estado are left untouched (no-op) - same
+        rule as ReglasCobroToolBar/MetodosPagoToolBar's
+        _set_estado_for_selection. Never a physical delete - just
+        estado="inactivo"/"activo" - but deactivating still asks for
+        confirmation first (PLAN.md 2.2/4.4).
         """
-        names: List[str] = []
-        if self.model is not None:
-            for row in rows:
-                nombre_item = self.model.item(row, 2)
-                apellidos_item = self.model.item(row, 3)
-                parts = [item.text() for item in (nombre_item, apellidos_item) if item is not None and item.text()]
-                label = " ".join(parts).strip()
-                names.append(label if label else f"fila {row}")
+        if self.table is None or self.model is None:
+            return
+        titulo = "Activar" if nuevo_estado == "activo" else "Desactivar"
+        sel = self.table.selectionModel().selectedRows()
+        if not sel:
+            QMessageBox.information(self, titulo, "Seleccione uno o más miembros.")
+            return
 
-        if len(rows) == 1:
-            detail = names[0] if names else "el miembro seleccionado"
-            message = f"¿Desactivar a {detail}?\n\nEl miembro se marcará como inactivo; su historial no se elimina."
+        targets = [
+            (id_socio, nombre)
+            for id_socio, nombre, estado_actual in self._resolve_selected_rows()
+            if estado_actual != nuevo_estado
+        ]
+        if not targets:
+            verbo = "activos" if nuevo_estado == "activo" else "inactivos"
+            QMessageBox.information(self, titulo, f"Los miembros seleccionados ya están {verbo}.")
+            return
+
+        if nuevo_estado == "inactivo" and not self._confirm_deactivation([nombre for _, nombre in targets]):
+            return
+
+        failures = [
+            nombre for id_socio, nombre in targets if not self.service.set_socio_estado(id_socio, nuevo_estado)
+        ]
+        if failures:
+            QMessageBox.critical(
+                self, "Error", "No se pudo actualizar el estado de: " + ", ".join(failures)
+            )
+        self._refresh_parent()
+
+    def _confirm_deactivation(self, names: List[str]) -> bool:
+        """Ask the user to confirm deactivating the given members by name.
+
+        Never a physical delete - just estado="inactivo" - but it persists
+        to the real DB, so it's worth a confirmation step before it fires
+        (PLAN.md 2.2/4.4).
+        """
+        if len(names) == 1:
+            message = f"¿Desactivar a {names[0]}?\n\nEl miembro se marcará como inactivo; su historial no se elimina."
         else:
-            listado = "\n".join(f"- {n}" for n in names) if names else f"{len(rows)} miembros"
+            listado = "\n".join(f"- {n}" for n in names)
             message = (
-                f"¿Desactivar los siguientes {len(rows)} miembros?\n\n{listado}\n\n"
+                f"¿Desactivar los siguientes {len(names)} miembros?\n\n{listado}\n\n"
                 "Se marcarán como inactivos; su historial no se elimina."
             )
 
@@ -224,6 +270,14 @@ class MembersToolBar(QToolBar):
             QMessageBox.StandardButton.No,
         )
         return reply == QMessageBox.StandardButton.Yes
+
+    def _refresh_parent(self) -> None:
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "refresh_table"):
+            try:
+                parent.refresh_table()
+            except Exception as exc:
+                logger.exception("MembersToolBar: refresh_table failed - %s", exc)
 
     def _confirm_titular_swap(
         self, numero_socio: Optional[str], wants_titular: bool, exclude_id_socio: Optional[int]

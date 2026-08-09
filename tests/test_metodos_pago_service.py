@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from database.models import Log, MetodoPago
 from database.seed_db import METODOS_PAGO_FIJOS, seed_metodos_pago
-from features.settings.metodos_pago_service import MetodosPagoService
+from features.settings.metodos_pago.service import MetodosPagoService
 
 
 class TestListMetodosPago:

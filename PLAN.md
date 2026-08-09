@@ -40,7 +40,7 @@ This document lists, by category, everything that's pending and proposes an exec
 - [x] Real member search & default table load — replaced the `# FIXME` placeholder with a real query over `socios`; the default load now goes through the same query path instead of `ViewRegistry` (2.3)
 - [x] Editing members — `MemberDialog` reused in an "edit" mode (`initial_data`) + `MembersService.get_member`/`update_member` (2.1)
 - [x] Deactivation confirmation dialog before `MembersToolBar.on_delete_member` fires (2.2 / 4.3)
-- [x] Audit log rows written on every member create/edit/deactivate, via `database/audit.py`'s `record_log` (2.12 — writing only; reading them back is still open, see 2.12 below)
+- [x] Audit log rows written on every member create/edit/deactivate, via `database/audit.py`'s `record_log` (2.12 — writing only; reading them back was a separate, later chunk, see the audit-log-viewer entry below)
 - [x] Retired the generic "Vistas" multi-table browser from the Members screen (2.16)
 
 **Completed** (branch `feat/seed-data-and-settings`):
@@ -60,6 +60,12 @@ This document lists, by category, everything that's pending and proposes an exec
 
 **Completed** (branch `feat/estado-filter-inactive-members`):
 - [x] Estado-aware filtering for deactivated members (2.2) — `MembersMenuService.search_members`/`_fetch_socios_rows` hide `estado="inactivo"` socios by default; a "Mostrar inactivos" checkable action in the Members Filtros menu opts back in, re-running the query rather than hiding/showing a column.
+
+**Completed** (2026-08-09):
+- [x] Members Activar/Desactivar toolbar buttons — the members toolbar only had a one-way "Eliminar" action (deactivate via `MembersService.delete_members`, no way to reactivate from the UI once a member was deactivated). Replaced it with the same batch Activar/Desactivar pattern already used by Métodos de pago/Reglas de cobro (fix/multiselect-edit-guard, above): `MembersService.set_socio_estado(id_socio, estado)` (single-row, mirrors `set_metodo_pago_estado`/`set_regla_cobro_estado`) plus `MembersToolBar._set_estado_for_selection`/`_resolve_selected_rows` (batch, skips rows already in the target estado, confirms only when deactivating). A deactivated member can now be found again via "Mostrar inactivos" and reactivated with "Activar", instead of being stuck inactive forever.
+
+**Completed** (branch `feat/audit-log-viewer`):
+- [x] Audit log viewer (2.12) — `features/settings/audit_log/service.py`/`view.py`, a new "🗂️ Registro de auditoría" section under Ajustes.
 
 Everything below already has an ORM model declared in `models.py` but **zero UI and zero service logic**, except where noted above:
 
@@ -89,10 +95,6 @@ Everything below already has an ORM model declared in `models.py` but **zero UI 
 
 ### 2.11 Drag-and-drop import from spreadsheets
 - A non-functional requirement from the README; there's no Excel/CSV parser or drag-and-drop support in the current UI.
-
-### 2.12 Audit / Log
-- Writing `Log` rows on every member create/edit/deactivate is done (see Completed block above).
-- **Still pending (separate from writing logs):** where a user actually *reads* them back — no audit-log viewer screen exists yet. A readable timeline/text view fits `logs`' narrative-shaped rows (`accion`, `descripcion_cambio`, `fecha_hora`) better than a raw grid — candidate location: a tab under Settings, or a small dedicated `features/audit/` screen. See `CLAUDE.md`'s table-to-screen mapping note — `logs` is the one table still left without an assigned screen.
 
 ### 2.13 Security — encryption of sensitive data
 - An explicit non-functional requirement in the README ("Encrypted storage of sensitive data"). The SQLite `.db` today has no encryption at all (no SQLCipher, no column-level encryption). No related dependency in `pyproject.toml`.
@@ -168,7 +170,7 @@ Tooling: `openpyxl` + `oletools` were installed into a **throwaway `uv venv`** i
    - `pytest-qt` — deferred, no test yet needs a real `QApplication`.
    - Aggressively separating pure logic (services: `toolbar_service.py`, `menu_service.py`, future `transactions/service.py`, balance calculation) from the Qt layer beyond what's already service-separated.
    - Tests for balance calculation, once that logic exists (2.5).
-   - No Qt-level tests yet (views/dialogs/toolbars) — `get_member`/`update_member`/`delete_members`/`search_members` now have service-level coverage (see `CLAUDE.md`'s `tests/` section), but nothing exercises the toolbar's confirmation dialog or dialog pre-fill through a real `QApplication`. No coverage of exports.
+   - No Qt-level tests yet (views/dialogs/toolbars) — `get_member`/`update_member`/`set_socio_estado`/`search_members` now have service-level coverage (see `CLAUDE.md`'s `tests/` section), but nothing exercises the toolbar's confirmation dialog or dialog pre-fill through a real `QApplication`. No coverage of exports.
 2. **No linter/formatter/type-checker.** No `ruff`, `black`, or `mypy` in `pyproject.toml`. Since the code already uses type hints (`Optional`, `dict[str, Any]`, etc.), `mypy` or `pyright` would add real value, especially in the service layer.
 3. **No CI.** No `.github/workflows/`. Once a test suite exists, adding a minimal workflow (`uv sync` + `pytest`) would catch regressions like the `on_refresh` indentation bug — though a linter would have caught that one too (even if not as a syntax error).
 4. **`db.sql` and `db.md` are out of date** relative to `models.py` (a `forma_pago`/`estado` columns in `db.sql` that don't exist on the ORM; `id_usuario`/`usuarios` naming in `db.md` that doesn't match `id_socio`/`socios`). Decide: keep them manually in sync every time `models.py` changes, or generate them automatically (e.g. with `sqlalchemy-schemadisplay` or similar) so they can't drift again.
@@ -198,20 +200,17 @@ Tooling: `openpyxl` + `oletools` were installed into a **throwaway `uv venv`** i
 
 **Done** (steps that drove the original ordering — kept here only as a progress marker, see §1/§2's own Completed blocks for detail): quick bugs from the original audit, minimal testing infrastructure, Members CRUD completion, seed data + Settings (incl. database reset), the transactions module minus balance recalculation, titular per `numero_socio` (2.17), the numeric validator scientific-notation fix, and non-editable grid cells + a Refrescar/search-filter bug fix (§1).
 
-**Next up — small, independent, unblocked fixes.** None of these need the still-open business-rule decisions below, so they're cheaper to clear now than to leave sitting alongside blocked work:
-1. **Audit log viewer** (2.12) — `logs` is still the one table with no assigned screen; needs a location decision (tab under Settings vs. a small `features/audit/` screen) before building.
-
-**Then — gated on user decisions, not on any remaining code:**
-2. **Balance calculation and Periods** (2.5, 2.6) — 2.15b's `.xlsm` analysis is done, but implementation is still blocked on resolving what it surfaced: período-scoped vs. continuous `saldo_actual`, devolución-vs-reembolso modeling, and `plazo_pago`/`descuento` values with no legacy precedent. A full Periods management screen is still unbuilt.
-3. **Business-standard test scenarios** (3.8) — once the rules they encode (2.4 done, 2.5/2.6 pending, 2.7 done) actually exist end-to-end.
+**Next — gated on user decisions, not on any remaining code:**
+1. **Balance calculation and Periods** (2.5, 2.6) — 2.15b's `.xlsm` analysis is done, but implementation is still blocked on resolving what it surfaced: período-scoped vs. continuous `saldo_actual`, devolución-vs-reembolso modeling, and `plazo_pago`/`descuento` values with no legacy precedent. A full Periods management screen is still unbuilt.
+2. **Business-standard test scenarios** (3.8) — once the rules they encode (2.4 done, 2.5/2.6 pending, 2.7 done) actually exist end-to-end.
 
 **Then — larger, independent features:**
-4. **Reports + export** (2.8), then **charts/statistics** (2.9).
-5. **Backups** (2.10) and **import** (2.11) — can be tackled in parallel or at the end.
-6. **Long-term non-functionals**: Alembic (a technical prerequisite — move it earlier if the schema starts changing a lot), encryption (2.13), Postgres migration (2.14).
-7. **Visual/UI polish broader pass** (4.3) — the token layer/`qtawesome` icons/shared "data screen" composition extraction from `UI_PROPOSAL.md`, distinct from the targeted fixes above; best done once transactions/periods/reports screens exist so styling isn't reworked twice.
-8. **Second legacy workbook analysis** (2.15c) — deliberately deferred by the user; pick up whenever prioritized, independent of everything else in this list.
-9. **Calendar** (2.18) — main-menu "📅 Calendario" screen for events/reminders, with email reminders to socios as a later follow-up. **Deliberately the very last item in this entire plan**, per explicit user instruction (2026-08-09) — not to be pulled forward ahead of anything else above, even if it looks small/independent enough to slot in earlier.
+3. **Reports + export** (2.8), then **charts/statistics** (2.9).
+4. **Backups** (2.10) and **import** (2.11) — can be tackled in parallel or at the end.
+5. **Long-term non-functionals**: Alembic (a technical prerequisite — move it earlier if the schema starts changing a lot), encryption (2.13), Postgres migration (2.14).
+6. **Visual/UI polish broader pass** (4.3) — the token layer/`qtawesome` icons/shared "data screen" composition extraction from `UI_PROPOSAL.md`, distinct from the targeted fixes above; best done once transactions/periods/reports screens exist so styling isn't reworked twice.
+7. **Second legacy workbook analysis** (2.15c) — deliberately deferred by the user; pick up whenever prioritized, independent of everything else in this list.
+8. **Calendar** (2.18) — main-menu "📅 Calendario" screen for events/reminders, with email reminders to socios as a later follow-up. **Deliberately the very last item in this entire plan**, per explicit user instruction (2026-08-09) — not to be pulled forward ahead of anything else above, even if it looks small/independent enough to slot in earlier.
 
 ---
 

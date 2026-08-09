@@ -24,10 +24,10 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from .metodos_pago_view import show_metodos_pago_view
-from .reglas_cobro_view import show_reglas_cobro_view
-from .reset_view import show_reset_view
-from .audit_log_view import show_audit_log_view
+from .metodos_pago.view import show_metodos_pago_view
+from .reglas_cobro.view import show_reglas_cobro_view
+from .reset.view import show_reset_view
+from .audit_log.view import show_audit_log_view
 from ui.styles import SETTINGS_MENU_STYLESHEET
 from utils.logger import get_logger
 
