@@ -7,7 +7,7 @@ concerns separated and make view registration reusable.
 """
 from __future__ import annotations
 
-from typing import Any, Iterable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from database.session import engine
 from sqlalchemy import text
@@ -53,12 +53,25 @@ class ViewRegistry:
     def get_views(self) -> List[str]:
         return list(self._views.keys())
 
+    @staticmethod
+    def _execute_sql(sql: str, limit: Optional[int]) -> Tuple[List[str], List[tuple]]:
+        """Run `sql` (optionally appended with `LIMIT :limit`) and return (keys, rows)."""
+        if limit is not None:
+            stmt = text(f"{sql} LIMIT :limit")
+            with engine.connect() as conn:
+                res = conn.execute(stmt, {"limit": limit})
+                return list(res.keys()), res.fetchall()
+        stmt = text(sql)
+        with engine.connect() as conn:
+            res = conn.execute(stmt)
+            return list(res.keys()), res.fetchall()
+
     def fetch_table(self, table_name: str, limit: Optional[int] = None) -> Tuple[List[str], List[tuple]]:
         """Return (keys, rows) for SELECT * FROM table_name.
 
         This returns data rather than mutating a Qt model so the caller
         can decide how to populate the UI.
-        
+
         Args:
             table_name: Name of the database table to fetch
             limit: Optional limit on number of rows. If None, fetches all rows.
@@ -71,19 +84,7 @@ class ViewRegistry:
             if limit == 0:
                 limit = None
 
-            if limit is not None:
-                stmt = text(f'SELECT * FROM "{table_name}" LIMIT :limit')
-                with engine.connect() as conn:
-                    res = conn.execute(stmt, {"limit": limit})
-                    rows = res.fetchall()
-                    keys = list(res.keys())
-            else:
-                stmt = text(f'SELECT * FROM "{table_name}"')
-                with engine.connect() as conn:
-                    res = conn.execute(stmt)
-                    rows = res.fetchall()
-                    keys = list(res.keys())
-            return keys, rows
+            return self._execute_sql(f'SELECT * FROM "{table_name}"', limit)
         except Exception as exc:
             logger.exception("ViewRegistry.fetch_table: failed - %s", exc)
             return [], []
@@ -92,7 +93,7 @@ class ViewRegistry:
         """Fetch a registered view and return (keys, rows).
 
         Supports table, sql and callable view types.
-        
+
         Args:
             name: Name of the registered view or table
             limit: Optional limit on number of rows. If None, fetches all rows.
@@ -113,30 +114,16 @@ class ViewRegistry:
 
             if vtype == "sql":
                 sql = entry["value"]
+                # Normalize limit: treat 0 as no limit
+                norm_limit = None if limit == 0 else limit
                 try:
-                    # Normalize limit: treat 0 as no limit
-                    if limit == 0:
-                        limit = None
-
-                    if limit is not None:
-                        stmt = text(f"{sql} LIMIT :limit")
-                        with engine.connect() as conn:
-                            res = conn.execute(stmt, {"limit": limit})
-                            rows = res.fetchall()
-                            keys = list(res.keys())
-                    else:
-                        stmt = text(sql)
-                        with engine.connect() as conn:
-                            res = conn.execute(stmt)
-                            rows = res.fetchall()
-                            keys = list(res.keys())
+                    return self._execute_sql(sql, norm_limit)
                 except Exception:
-                    # Fallback: execute raw SQL without limit
+                    # Fallback: execute raw SQL without limit (e.g. the SQL
+                    # already ends in a clause LIMIT can't just be appended to)
                     with engine.connect() as conn:
                         res = conn.execute(text(sql))
-                        rows = res.fetchall()
-                        keys = list(res.keys())
-                return keys, rows
+                        return list(res.keys()), res.fetchall()
 
             if vtype == "callable":
                 func = entry["value"]

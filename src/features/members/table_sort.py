@@ -10,7 +10,10 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItem
 
+from utils.logger import get_logger
 from utils.text import normalize_for_match
+
+logger = get_logger(__name__)
 
 
 class TableSortMixin:
@@ -86,8 +89,8 @@ class TableSortMixin:
                 # Third click: clear sorting and restore original order
                 self._clear_sort()
                 return
-        except Exception as exc:
-            print("Header click sorting failed:", exc)
+        except Exception:
+            logger.exception("TableSortMixin._on_header_clicked: sorting failed")
 
     def _apply_sort(self) -> None:
         """Apply the current sort to the model and show indicator."""
@@ -133,8 +136,8 @@ class TableSortMixin:
                 self.ensure_columns_fill()
             except Exception:
                 pass
-        except Exception as exc:
-            print("Failed to apply sort:", exc)
+        except Exception:
+            logger.exception("TableSortMixin._apply_sort: failed to apply sort")
 
     def _clear_sort(self) -> None:
         """Clear any active sort and restore original data order.
@@ -174,8 +177,8 @@ class TableSortMixin:
                 self.refresh_table()
             except Exception:
                 pass
-        except Exception as exc:
-            print("Failed to clear sort:", exc)
+        except Exception:
+            logger.exception("TableSortMixin._clear_sort: failed to clear sort")
 
     def _maybe_reapply_sort(self) -> None:
         """Re-apply active sort after the model has been (re)populated.

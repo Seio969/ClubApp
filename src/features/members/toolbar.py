@@ -10,7 +10,7 @@ from typing import List, Optional, TYPE_CHECKING
 
 from PySide6.QtWidgets import QToolBar, QStyle, QTableView, QMessageBox
 from PySide6.QtCore import QSize
-from PySide6.QtGui import QStandardItemModel, QStandardItem
+from PySide6.QtGui import QStandardItemModel
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QWidget

@@ -219,7 +219,7 @@ def show_transactions_view(main_window) -> None:
     tv = getattr(main_window, "_transactions_view", None)
     if tv is None:
         tv = TransactionsView(main_window)
-        setattr(main_window, "_transactions_view", tv)
+        main_window._transactions_view = tv
         main_window._stack.addWidget(tv)
 
     main_window._stack.setCurrentWidget(tv)

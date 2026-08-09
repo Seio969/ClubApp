@@ -165,7 +165,7 @@ def show_reglas_cobro_view(main_window) -> None:
     rv = getattr(main_window, "_reglas_cobro_view", None)
     if rv is None:
         rv = ReglasCobroView(main_window)
-        setattr(main_window, "_reglas_cobro_view", rv)
+        main_window._reglas_cobro_view = rv
         main_window._stack.addWidget(rv)
 
     main_window._stack.setCurrentWidget(rv)

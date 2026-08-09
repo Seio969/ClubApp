@@ -6,7 +6,6 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QHBoxLayout,
     QGridLayout,
     QLabel,
     QPushButton,
@@ -14,7 +13,7 @@ from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect,
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QAction
+from PySide6.QtGui import QColor
 from features.members.menu_view import show_members_view
 from features.settings.menu_view import show_settings_view
 from features.transactions.view import show_transactions_view

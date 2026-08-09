@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
-    QScrollArea,
     QToolButton,
     QStyle,
     QMenu,
@@ -425,7 +424,7 @@ def show_members_view(main_window) -> None:
     mv = getattr(main_window, "_members_view", None)
     if mv is None:
         mv = MembersMenuView(main_window)  # Pass main_window as parent
-        setattr(main_window, "_members_view", mv)
+        main_window._members_view = mv
         # Add to the application's central stack
         main_window._stack.addWidget(mv)
 

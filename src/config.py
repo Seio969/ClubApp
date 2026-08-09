@@ -1,5 +1,4 @@
 # src/config.py
-import os
 from pathlib import Path
 
 # Root directory = project root (two levels up from here)
