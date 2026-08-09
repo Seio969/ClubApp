@@ -220,7 +220,7 @@ class TestListTransactionsPrefersTitularName:
                 Transaccion(
                     numero_socio="1001",
                     id_periodo=periodo.id_periodo,
-                    tipo="pago",
+                    tipo="Pago",
                     monto=decimal.Decimal("45.00"),
                     fecha=datetime.date(2026, 1, 5),
                 )

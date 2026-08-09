@@ -23,7 +23,7 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-TIPOS_TRANSACCION = ("cargo", "pago", "reembolso")
+TIPOS_TRANSACCION = ("Cargo", "Pago", "Reembolso", "Devolución")
 
 # Columns for the standalone Transacciones screen (list_transactions), in
 # display order.
@@ -305,9 +305,9 @@ class TransactionsService:
         tipo = data.get("tipo")
         monto = data.get("monto")
 
-        if tipo == "reembolso":
-            pagos = self._sum_by_tipo(session, numero_socio, id_periodo, "pago")
-            reembolsos = self._sum_by_tipo(session, numero_socio, id_periodo, "reembolso")
+        if tipo == "Reembolso":
+            pagos = self._sum_by_tipo(session, numero_socio, id_periodo, "Pago")
+            reembolsos = self._sum_by_tipo(session, numero_socio, id_periodo, "Reembolso")
             disponible = pagos - reembolsos
             if monto is None or monto > disponible:
                 return (

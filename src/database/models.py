@@ -72,7 +72,7 @@ class Transaccion(Base):
     numero_socio = Column(String, ForeignKey("socios.numero_socio"))
     id_periodo = Column(Integer, ForeignKey("periodo.id_periodo"))
     id_metodo = Column(Integer, ForeignKey("metodos_pago.id_metodo"))
-    tipo = Column(String, nullable=False)  # cargo/pago/reembolso
+    tipo = Column(String, nullable=False)  # Cargo/Pago/Reembolso/Devolución - see TIPOS_TRANSACCION
     monto = Column(Numeric(10, 2), nullable=False)
     fecha = Column(Date, default=datetime.date.today)
     referencia = Column(String)

@@ -173,7 +173,7 @@ class TestAddTransaction:
             "id_socio_log": socio.id_socio,
             "id_periodo": periodo.id_periodo,
             "id_metodo": metodo.id_metodo,
-            "tipo": "pago",
+            "tipo": "Pago",
             "monto": decimal.Decimal("45.00"),
             "fecha": datetime.date(2026, 1, 5),
             "referencia": "Pago cuota enero",
@@ -189,7 +189,7 @@ class TestAddTransaction:
         with Session(test_engine) as session:
             transaccion = session.get(Transaccion, new_id)
             assert transaccion.numero_socio == data["numero_socio"]
-            assert transaccion.tipo == "pago"
+            assert transaccion.tipo == "Pago"
             assert transaccion.monto == decimal.Decimal("45.00")
             assert transaccion.referencia == "Pago cuota enero"
 
@@ -229,7 +229,7 @@ class TestDuplicateTransactionRejection:
             "id_socio_log": socio.id_socio,
             "id_periodo": periodo.id_periodo,
             "id_metodo": metodo.id_metodo,
-            "tipo": "cargo",
+            "tipo": "Cargo",
             "monto": decimal.Decimal("45.00"),
             "fecha": datetime.date(2026, 1, 5),
             "referencia": None,
@@ -288,7 +288,7 @@ class TestRefundRequiresPriorPayment:
             "id_socio_log": socio.id_socio,
             "id_periodo": periodo.id_periodo,
             "id_metodo": metodo.id_metodo,
-            "tipo": "pago",
+            "tipo": "Pago",
             "monto": decimal.Decimal(monto),
             "fecha": datetime.date(2026, 1, 5),
             "referencia": None,
@@ -306,7 +306,7 @@ class TestRefundRequiresPriorPayment:
                 "id_socio_log": socio.id_socio,
                 "id_periodo": periodo.id_periodo,
                 "id_metodo": metodo.id_metodo,
-                "tipo": "reembolso",
+                "tipo": "Reembolso",
                 "monto": decimal.Decimal("10.00"),
                 "fecha": datetime.date(2026, 1, 6),
                 "referencia": None,
@@ -324,12 +324,12 @@ class TestRefundRequiresPriorPayment:
             pago = self._setup_pago(session, "45.00")
         service.add_transaction(pago)
 
-        reembolso = dict(pago, tipo="reembolso", monto=decimal.Decimal("20.00"), fecha=datetime.date(2026, 1, 10))
+        reembolso = dict(pago, tipo="Reembolso", monto=decimal.Decimal("20.00"), fecha=datetime.date(2026, 1, 10))
         new_id = service.add_transaction(reembolso)
 
         assert new_id is not None
         with Session(test_engine) as session:
-            assert session.query(Transaccion).filter_by(tipo="reembolso").count() == 1
+            assert session.query(Transaccion).filter_by(tipo="Reembolso").count() == 1
 
     def test_rejects_refund_exceeding_prior_payment(self, test_engine):
         service = TransactionsService()
@@ -337,27 +337,27 @@ class TestRefundRequiresPriorPayment:
             pago = self._setup_pago(session, "45.00")
         service.add_transaction(pago)
 
-        reembolso = dict(pago, tipo="reembolso", monto=decimal.Decimal("50.00"), fecha=datetime.date(2026, 1, 10))
+        reembolso = dict(pago, tipo="Reembolso", monto=decimal.Decimal("50.00"), fecha=datetime.date(2026, 1, 10))
         new_id = service.add_transaction(reembolso)
 
         assert new_id is None
         with Session(test_engine) as session:
-            assert session.query(Transaccion).filter_by(tipo="reembolso").count() == 0
+            assert session.query(Transaccion).filter_by(tipo="Reembolso").count() == 0
 
     def test_rejects_refund_exceeding_pago_minus_prior_reembolso(self, test_engine):
         service = TransactionsService()
         with Session(test_engine) as session:
             pago = self._setup_pago(session, "45.00")
         service.add_transaction(pago)
-        primer_reembolso = dict(pago, tipo="reembolso", monto=decimal.Decimal("30.00"), fecha=datetime.date(2026, 1, 10))
+        primer_reembolso = dict(pago, tipo="Reembolso", monto=decimal.Decimal("30.00"), fecha=datetime.date(2026, 1, 10))
         assert service.add_transaction(primer_reembolso) is not None
 
-        segundo_reembolso = dict(pago, tipo="reembolso", monto=decimal.Decimal("20.00"), fecha=datetime.date(2026, 1, 11))
+        segundo_reembolso = dict(pago, tipo="Reembolso", monto=decimal.Decimal("20.00"), fecha=datetime.date(2026, 1, 11))
         new_id = service.add_transaction(segundo_reembolso)
 
         assert new_id is None
         with Session(test_engine) as session:
-            assert session.query(Transaccion).filter_by(tipo="reembolso").count() == 1
+            assert session.query(Transaccion).filter_by(tipo="Reembolso").count() == 1
 
     def test_scoped_to_periodo_payment_in_other_periodo_does_not_count(self, test_engine):
         service = TransactionsService()
@@ -372,19 +372,19 @@ class TestRefundRequiresPriorPayment:
                 "id_socio_log": socio.id_socio,
                 "id_periodo": periodo_enero.id_periodo,
                 "id_metodo": metodo.id_metodo,
-                "tipo": "pago",
+                "tipo": "Pago",
                 "monto": decimal.Decimal("45.00"),
                 "fecha": datetime.date(2026, 1, 5),
                 "referencia": None,
             }
-            reembolso_febrero = dict(pago_enero, id_periodo=periodo_febrero.id_periodo, tipo="reembolso", monto=decimal.Decimal("10.00"), fecha=datetime.date(2026, 2, 5))
+            reembolso_febrero = dict(pago_enero, id_periodo=periodo_febrero.id_periodo, tipo="Reembolso", monto=decimal.Decimal("10.00"), fecha=datetime.date(2026, 2, 5))
 
         service.add_transaction(pago_enero)
         new_id = service.add_transaction(reembolso_febrero)
 
         assert new_id is None
         with Session(test_engine) as session:
-            assert session.query(Transaccion).filter_by(tipo="reembolso").count() == 0
+            assert session.query(Transaccion).filter_by(tipo="Reembolso").count() == 0
 
 
 class TestListTransactions:
@@ -406,7 +406,7 @@ class TestListTransactions:
                     numero_socio="1001",
                     id_periodo=periodo.id_periodo,
                     id_metodo=metodo.id_metodo,
-                    tipo="pago",
+                    tipo="Pago",
                     monto=decimal.Decimal("45.00"),
                     fecha=datetime.date(2026, 1, 5),
                 )
@@ -426,17 +426,17 @@ class TestListTransactions:
             periodo = _make_periodo(session)
             session.add_all(
                 [
-                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="pago", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 1, 5)),
-                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="cargo", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 1, 1)),
+                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="Pago", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 1, 5)),
+                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="Cargo", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 1, 1)),
                 ]
             )
             session.commit()
 
         model = _FakeModel()
-        added = TransactionsService().list_transactions("", tipo="cargo", model=model)
+        added = TransactionsService().list_transactions("", tipo="Cargo", model=model)
 
         assert added == 1
-        assert model.rows[0][3] == "cargo"
+        assert model.rows[0][3] == "Cargo"
 
     def test_filters_by_periodo(self, test_engine):
         with Session(test_engine) as session:
@@ -446,8 +446,8 @@ class TestListTransactions:
             periodo_b = _make_periodo(session, nombre="Febrero", fecha_inicio=datetime.date(2026, 2, 1), fecha_fin=datetime.date(2026, 2, 28))
             session.add_all(
                 [
-                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo_a.id_periodo, id_metodo=metodo.id_metodo, tipo="pago", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 1, 5)),
-                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo_b.id_periodo, id_metodo=metodo.id_metodo, tipo="pago", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 2, 5)),
+                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo_a.id_periodo, id_metodo=metodo.id_metodo, tipo="Pago", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 1, 5)),
+                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo_b.id_periodo, id_metodo=metodo.id_metodo, tipo="Pago", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 2, 5)),
                 ]
             )
             session.commit()
@@ -465,7 +465,7 @@ class TestListTransactions:
             metodo = _make_metodo(session)
             periodo = _make_periodo(session)
             session.add(
-                Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="pago", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 1, 5))
+                Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="Pago", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 1, 5))
             )
             session.commit()
 
@@ -482,8 +482,8 @@ class TestListTransactions:
             periodo = _make_periodo(session)
             session.add_all(
                 [
-                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="pago", monto=decimal.Decimal("10.00"), fecha=datetime.date(2026, 1, 1)),
-                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="pago", monto=decimal.Decimal("20.00"), fecha=datetime.date(2026, 1, 20)),
+                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="Pago", monto=decimal.Decimal("10.00"), fecha=datetime.date(2026, 1, 1)),
+                    Transaccion(numero_socio=socio.numero_socio, id_periodo=periodo.id_periodo, id_metodo=metodo.id_metodo, tipo="Pago", monto=decimal.Decimal("20.00"), fecha=datetime.date(2026, 1, 20)),
                 ]
             )
             session.commit()
