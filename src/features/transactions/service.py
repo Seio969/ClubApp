@@ -231,6 +231,8 @@ class TransactionsService:
         model.setHorizontalHeaderLabels([str(k) for k in keys])
         for row in rows:
             items = [QStandardItem("") if v is None else QStandardItem(str(v)) for v in row]
+            for item in items:
+                item.setEditable(False)
             model.appendRow(items)
 
     def export_transactions(self, rows: Optional[List[List[str]]] = None, destination: Optional[str] = None) -> None:
