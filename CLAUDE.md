@@ -21,12 +21,9 @@ Dependencies are managed with **uv** (`uv.lock` is present; no `requirements.txt
 
 There is no linter, formatter, or type-checker configured anywhere in this repo (no `ruff`, `mypy`, etc. in `pyproject.toml`). `pytest` is present as a dev dependency; most of the app (Qt views, most services) still has no tests.
 
-### Creating/merging GitHub pull requests
-The `gh` CLI is **not installed** in this dev environment — don't shell out to `gh pr create`/`gh pr merge`, it will fail with "command not found." Use the GitHub REST API directly instead (`curl`/PowerShell `Invoke-RestMethod`), authenticated with the `GH_TOKEN` environment variable (a fine-grained PAT scoped to this repo, set as a persistent user env var — see `setx` on Windows). If `GH_TOKEN` isn't set in the environment, don't try to open/merge a PR yourself — tell the user and let them do it manually (e.g. via VS Code's GitHub Pull Requests extension) instead of guessing at auth.
+### Git operations and GitHub pull requests
 
-The repo is `Seio969/ClubApp` (owner/repo for the REST API's `/repos/{owner}/{repo}/...` paths) — no need to run `git remote get-url origin` to derive this each time.
-
-**Known gap:** as of 2026-08-08, `GH_TOKEN` can create PRs (`POST /pulls`) but merging (`PUT /pulls/{number}/merge`) 403s with "Resource not accessible by personal access token" — the `X-Accepted-GitHub-Permissions` response header on other endpoints shows the token is scoped for `metadata=read` only-ish access; it's missing the `contents: write` permission a merge requires. Until the PAT's permissions are widened, treat PR creation as automatable but merging as a manual step for the user (via the web UI or VS Code's GitHub Pull Requests extension) — don't retry the merge call expecting a different result.
+Do not run `git commit`, `git push`, or create/merge a pull request (via `gh`, the GitHub REST API, or otherwise) — the user handles all of that manually to conserve tokens. Creating a local feature branch is fine. When a chunk of work is done, hand the user a PR title/body draft (Summary + Test plan) so they can commit, push, and open the PR themselves; don't attempt any of those steps.
 
 ### Import path convention
 
@@ -56,7 +53,7 @@ src/
     members/
       menu_service.py          # real search/query logic for the members screen (socios only)
       toolbar_service.py       # CRUD logic for the members toolbar (add/get/update/delete, all audit-logged)
-      menu_view.py              # the members screen (search bar, límite, filtros, table)
+      menu_view.py              # the members screen (search bar, filtros, table)
       toolbar.py                 # QToolBar with Nuevo/Editar/Eliminar/Refrescar/Exportar/Registrar
       dialog.py                   # add/edit member dialog (one class, edit mode via initial_data)
       column_fill.py               # table column-width-fill helper

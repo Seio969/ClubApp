@@ -1,6 +1,6 @@
 """Reglas de cobro screen - one section reachable from the Settings hub.
 
-Same "small grid, no search/límite/sort" shape as MetodosPagoView -
+Same "small grid, no search/sort" shape as MetodosPagoView -
 UI_PROPOSAL.md's guidance for this screen applies here too.
 """
 

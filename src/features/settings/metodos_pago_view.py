@@ -2,7 +2,7 @@
 
 Unlike Members' screen, this table has a handful of rows at most (5 fixed
 methods plus whatever custom ones the club adds), so there's no
-search/límite/sort composition here - just a table and a toolbar, per
+search/sort composition here - just a table and a toolbar, per
 UI_PROPOSAL.md's "small grids" guidance for this screen.
 """
 

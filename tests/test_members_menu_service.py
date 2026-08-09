@@ -153,26 +153,6 @@ class TestSearchMembers:
         assert added == 0
         assert model.rows == []
 
-    def test_limit_restricts_row_count(self, test_engine):
-        for i in range(3):
-            _add_socio(test_engine, numero_socio=f"100{i}", nombre=f"Nombre{i}")
-        service = MembersMenuService()
-        model = _FakeModel()
-
-        added = service.search_members("", model, limit=1)
-
-        assert added == 1
-
-    def test_limit_zero_means_no_limit(self, test_engine):
-        for i in range(3):
-            _add_socio(test_engine, numero_socio=f"100{i}", nombre=f"Nombre{i}")
-        service = MembersMenuService()
-        model = _FakeModel()
-
-        added = service.search_members("", model, limit=0)
-
-        assert added == 3
-
     def test_inactive_members_are_still_matched(self, test_engine):
         # estado-aware filtering/display doesn't exist yet (PLAN.md 2.2) -
         # search must not silently hide deactivated members.

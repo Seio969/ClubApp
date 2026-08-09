@@ -18,9 +18,9 @@ decided (see PLAN.md §6 "Decisions"). Treat anything marked "Decided" there as
 settled; don't re-ask me about it.
 
 Before writing any code, create a feature branch for this chunk of work (main
-is protected on GitHub — no direct pushes, PR required) and publish it to
-origin right away. Commit and push as you go, so the remote branch stays
-up to date with your progress — but do NOT open a pull request yourself.
+is protected on GitHub — no direct pushes, PR required). Do NOT commit, push,
+or open a pull request yourself — I'll handle all git operations (commits,
+pushes, PR) manually.
 
 Work through ONE item at a time, then stop and report back to me before
 starting the next one — don't chain multiple fixes together without checking
@@ -42,16 +42,15 @@ description should describe the branch's final contents, not just the code:
     to. Don't leave decisions parked in PLAN.md once their task is done;
     PLAN.md is a shrinking todo list, CLAUDE.md is the durable
     architecture/decisions reference.
-Commit and push both files.
+Leave PLAN.md/CLAUDE.md changes uncommitted — I'll commit and push everything
+myself.
 
-As the final step — after PLAN.md/CLAUDE.md are committed and pushed, not
-before — give me a draft: a suggested PR title, and a body with a
+As the final step, give me a draft: a suggested PR title, and a body with a
 "## Summary" (bullet points of what changed and why, including the PLAN.md/
 CLAUDE.md updates alongside the code) and a "## Test plan" section, formatted
-the same way this repo's existing PRs are written — so I can review it and
-open the PR myself. Do not open the PR yourself. Then STOP — don't continue
-on to any other PLAN.md section. I'll start a fresh session for the next
-chunk myself.
+the same way this repo's existing PRs are written — so I can commit, push,
+and open the PR myself. Then STOP — don't continue on to any other PLAN.md
+section. I'll start a fresh session for the next chunk myself.
 
 Ask me before making any product/business-rule call that isn't already covered
 in PLAN.md §6 — but don't ask about anything already decided there.
@@ -65,9 +64,9 @@ decided (see PLAN.md §6 "Decisions"). Treat anything marked "Decided" there as
 settled; don't re-ask me about it.
 
 Before writing any code, create a feature branch for this chunk of work (main
-is protected on GitHub — no direct pushes, PR required) and publish it to
-origin right away. Commit and push as you go, so the remote branch stays
-up to date with your progress — but do NOT open a pull request yourself.
+is protected on GitHub — no direct pushes, PR required). Do NOT commit, push,
+or open a pull request yourself — I'll handle all git operations (commits,
+pushes, PR) manually.
 
 Work through ONE item at a time, then stop and report back to me before
 starting the next one — don't chain multiple fixes together without checking
@@ -89,16 +88,15 @@ description should describe the branch's final contents, not just the code:
     to. Don't leave decisions parked in PLAN.md once their task is done;
     PLAN.md is a shrinking todo list, CLAUDE.md is the durable
     architecture/decisions reference.
-Commit and push both files.
+Leave PLAN.md/CLAUDE.md changes uncommitted — I'll commit and push everything
+myself.
 
-As the final step — after PLAN.md/CLAUDE.md are committed and pushed, not
-before — give me a draft: a suggested PR title, and a body with a
+As the final step, give me a draft: a suggested PR title, and a body with a
 "## Summary" (bullet points of what changed and why, including the PLAN.md/
 CLAUDE.md updates alongside the code) and a "## Test plan" section, formatted
-the same way this repo's existing PRs are written — so I can review it and
-open the PR myself. Do not open the PR yourself. Then STOP — don't continue
-on to any other PLAN.md section. I'll start a fresh session for the next
-chunk myself.
+the same way this repo's existing PRs are written — so I can commit, push,
+and open the PR myself. Then STOP — don't continue on to any other PLAN.md
+section. I'll start a fresh session for the next chunk myself.
 
 Ask me before making any product/business-rule call that isn't already covered
 in PLAN.md §6 — but don't ask about anything already decided there.
