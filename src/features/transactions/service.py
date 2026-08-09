@@ -8,6 +8,7 @@ own persistence logic.
 
 from __future__ import annotations
 
+import calendar
 import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
@@ -34,16 +35,8 @@ def _add_months(fecha: datetime.date, months: int) -> datetime.date:
     month_index = fecha.month - 1 + months
     year = fecha.year + month_index // 12
     month = month_index % 12 + 1
-    day = min(fecha.day, _days_in_month(year, month))
+    day = min(fecha.day, calendar.monthrange(year, month)[1])
     return datetime.date(year, month, day)
-
-
-def _days_in_month(year: int, month: int) -> int:
-    if month == 12:
-        next_month = datetime.date(year + 1, 1, 1)
-    else:
-        next_month = datetime.date(year, month + 1, 1)
-    return (next_month - datetime.timedelta(days=1)).day
 
 
 class TransactionsService:
