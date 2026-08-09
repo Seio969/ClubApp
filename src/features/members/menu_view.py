@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 from PySide6.QtGui import QStandardItemModel, QAction
-from PySide6.QtCore import Qt, QEvent
+from PySide6.QtCore import Qt, QEvent, QTimer
 from utils.logger import get_logger
 logger = get_logger(__name__)
 
@@ -104,6 +104,15 @@ class MembersMenuView(QWidget, TableSortMixin):
         self.search_input.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.search_input.returnPressed.connect(self.on_search)
         center_layout.addWidget(self.search_input)
+
+        # Live/incremental search (PLAN.md 4.5): re-run the search as the
+        # user types, debounced so a fast typist doesn't fire a DB query per
+        # keystroke. Enter/"Buscar" still search immediately (see on_search).
+        self._search_debounce_timer = QTimer(self)
+        self._search_debounce_timer.setSingleShot(True)
+        self._search_debounce_timer.setInterval(250)
+        self._search_debounce_timer.timeout.connect(self.on_search)
+        self.search_input.textChanged.connect(self._on_search_text_changed)
 
         btn_search = QPushButton("Buscar")
         btn_search.setToolTip("Buscar usando el texto del campo superior")
@@ -284,12 +293,19 @@ class MembersMenuView(QWidget, TableSortMixin):
             action.toggled.connect(lambda checked, idx=col: self.table.setColumnHidden(idx, not checked))
             self.filters_menu.addAction(action)
 
+    def _on_search_text_changed(self, _text: str) -> None:
+        """Restart the debounce timer on every keystroke (PLAN.md 4.5)."""
+        self._search_debounce_timer.start()
+
     def on_search(self) -> None:
         """Perform a simple search using the text in the top bar input.
 
         This is intentionally minimal: it clears the table and inserts a single
         row containing the search text to show data flow.
         """
+        # Cancel any pending debounced call - this run (whether triggered by
+        # Enter/"Buscar" or the debounce timer itself) makes it redundant.
+        self._search_debounce_timer.stop()
         text = self.search_input.text().strip()
         # remember last search so clearing sort can re-run it
         self._last_search_text = text

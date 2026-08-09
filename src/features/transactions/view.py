@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 from PySide6.QtGui import QStandardItemModel
-from PySide6.QtCore import Qt, QEvent
+from PySide6.QtCore import Qt, QEvent, QTimer
 
 from .toolbar import TransactionsToolBar
 from .service import TIPOS_TRANSACCION, TransactionsService
@@ -77,6 +77,14 @@ class TransactionsView(QWidget, TableSortMixin):
         self.search_input.setMinimumWidth(220)
         self.search_input.returnPressed.connect(self.on_search)
         top_layout.addWidget(self.search_input, 1)
+
+        # Live/incremental search (PLAN.md 4.5) - see MembersMenuView's
+        # identical debounce pattern for the rationale.
+        self._search_debounce_timer = QTimer(self)
+        self._search_debounce_timer.setSingleShot(True)
+        self._search_debounce_timer.setInterval(250)
+        self._search_debounce_timer.timeout.connect(self.on_search)
+        self.search_input.textChanged.connect(self._on_search_text_changed)
 
         btn_search = QPushButton("Buscar", top_bar)
         btn_search.clicked.connect(self.on_search)
@@ -190,7 +198,13 @@ class TransactionsView(QWidget, TableSortMixin):
         self.periodo_filter.setCurrentIndex(select_index)
         self.periodo_filter.blockSignals(False)
 
+    def _on_search_text_changed(self, _text: str) -> None:
+        """Restart the debounce timer on every keystroke (PLAN.md 4.5)."""
+        self._search_debounce_timer.start()
+
     def on_search(self) -> None:
+        # Cancel any pending debounced call - this run makes it redundant.
+        self._search_debounce_timer.stop()
         text = self.search_input.text().strip()
         self._last_search_text = text
         tipo = self.tipo_filter.currentData()
