@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QStyle,
     QMessageBox,
-    QSizePolicy,
 )
 from PySide6.QtCore import Qt
 

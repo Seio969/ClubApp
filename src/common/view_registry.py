@@ -7,7 +7,7 @@ concerns separated and make view registration reusable.
 """
 from __future__ import annotations
 
-from typing import Any, Iterable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from database.session import engine
 from sqlalchemy import text

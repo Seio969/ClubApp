@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QStyle,
-    QSizePolicy,
 )
 from PySide6.QtCore import Qt
 
