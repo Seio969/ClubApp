@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Desktop management app ("Club Social Paraiso") for a club's members and finances: member records, dues/payments/refunds, per-period balances, and reporting. Built with **PySide6** (Qt) for the UI, **SQLAlchemy** ORM over **SQLite** for persistence. Domain/UI text and identifiers are in Spanish (Socio = member, Transaccion = transaction, Periodo = period, etc.) — match this convention when adding new domain code.
 
-The app is early-stage: the "Gestionar Miembros" (members) screen, a "🧾 Transacciones" screen, and a "⚙️ Ajustes" (settings) hub are wired up from the main menu. Within Members, member CRUD (search, create, edit, deactivate) is fully implemented and audit-logged; export remains a logging placeholder (see ARCHITECTURE.md) — transaction-registration ("Registrar") is real, opening the shared `TransactionDialog`. Within Ajustes, payment methods (`metodos_pago`) and billing rules (`reglas_cobro`) both have full CRUD, and a database reset action (full wipe + scoped reset) exists. Transactions (charges/pagos/reembolsos) have full CRUD-minus-edit (create + browse, no update/delete) with integrity validation, but balance calculation (`SaldoSocios`) and period management (`Periodo`) beyond a minimal quick-create are still unbuilt. Reports don't exist yet.
+The app is early-stage: the "Gestionar Miembros" (members) screen, a "🧾 Transacciones" screen, and a "⚙️ Ajustes" (settings) hub are wired up from the main menu. Within Members, member CRUD (search, create, edit, deactivate) is fully implemented and audit-logged; export remains a logging placeholder (see [architecture/members.md](architecture/members.md)) — transaction-registration ("Registrar") is real, opening the shared `TransactionDialog`. Within Ajustes, payment methods (`metodos_pago`) and billing rules (`reglas_cobro`) both have full CRUD, and a database reset action (full wipe + scoped reset) exists. Transactions (charges/pagos/reembolsos) have full CRUD-minus-edit (create + browse, no update/delete) with integrity validation, but balance calculation (`SaldoSocios`) and period management (`Periodo`) beyond a minimal quick-create are still unbuilt. Reports don't exist yet.
 
-See [README.md](README.md) for the full functional/non-functional requirements spec (in Spanish), [db.md](db.md) for a mermaid ER diagram of the *intended* schema (note: it has drifted from the actual code — see "Schema drift" in ARCHITECTURE.md), and [PLAN.md](PLAN.md) for the current task backlog.
+See [README.md](README.md) for the full functional/non-functional requirements spec (in Spanish), [db.md](db.md) for a mermaid ER diagram of the *intended* schema (note: it has drifted from the actual code — see "Schema drift" in [architecture/database.md](architecture/database.md)), and [PLAN.md](PLAN.md) for the current task backlog.
 
 ## Commands
 
@@ -16,8 +16,8 @@ Dependencies are managed with **uv** (`uv.lock` is present; no `requirements.txt
 
 - Install deps: `uv sync`
 - Run the app (from repo root): `uv run python src/main.py`
-- Initialize/reset the DB schema only: `uv run python src/database/init_db.py` (calls `Base.metadata.create_all` — creates missing tables, does **not** drop/alter existing ones; a small stopgap in `init_db()` (`_add_missing_columns`) ALTERs in the specific columns known to have been added after tables already existed — see ARCHITECTURE.md's `database/init_db.py` section — but any other schema change still needs the DB file deleted to fully rebuild). Also seeds the fixed `metodos_pago` rows via `database/seed_db.py`.
-- Run tests: `uv run pytest` (see ARCHITECTURE.md's `tests/` section for what's covered)
+- Initialize/reset the DB schema only: `uv run python src/database/init_db.py` (calls `Base.metadata.create_all` — creates missing tables, does **not** drop/alter existing ones; a small stopgap in `init_db()` (`_add_missing_columns`) ALTERs in the specific columns known to have been added after tables already existed — see [architecture/database.md](architecture/database.md)'s `database/init_db.py` section — but any other schema change still needs the DB file deleted to fully rebuild). Also seeds the fixed `metodos_pago` rows via `database/seed_db.py`.
+- Run tests: `uv run pytest` (see [architecture/testing.md](architecture/testing.md) for what's covered)
 
 There is no linter, formatter, or type-checker configured anywhere in this repo (no `ruff`, `mypy`, etc. in `pyproject.toml`). `pytest` is present as a dev dependency; most of the app (Qt views, most services) still has no tests.
 
@@ -37,7 +37,7 @@ Every module uses absolute imports rooted at `src/` (e.g. `from database.session
 
 ## Directory map
 
-`database/`/`common/`/`ui/`/`utils/` are cross-cutting layers (ORM models, generic table browsing, app shell/chrome, logging); each domain screen lives in its own `features/<domain>/` package (view, toolbar, dialog, and backing services together) — new domains (periods, reports) should follow the `features/members/` shape rather than adding flat files to a `services/` layer. `tests/` sits at the repo root alongside `src/`, not inside it. Full per-file description: ARCHITECTURE.md.
+`database/`/`common/`/`ui/`/`utils/` are cross-cutting layers (ORM models, generic table browsing, app shell/chrome, logging); each domain screen lives in its own `features/<domain>/` package (view, toolbar, dialog, and backing services together) — new domains (periods, reports) should follow the `features/members/` shape rather than adding flat files to a `services/` layer. `tests/` sits at the repo root alongside `src/`, not inside it. Full per-file description: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ```
 src/
@@ -86,7 +86,7 @@ src/
 
 ## Key invariants & durable decisions
 
-These are the cross-cutting rules most likely to cause a real bug or a re-litigated decision if forgotten. Full reasoning for each lives in ARCHITECTURE.md's "Cross-cutting notes" and the relevant per-file section.
+These are the cross-cutting rules most likely to cause a real bug or a re-litigated decision if forgotten. Full reasoning for each lives in [architecture/cross-cutting.md](architecture/cross-cutting.md) and the relevant per-file section under `architecture/` (see [ARCHITECTURE.md](ARCHITECTURE.md) for the index).
 
 - **`numero_socio` is a shared family identifier, not unique per `Socio` row.** `Transaccion`/`SaldoSocios` intentionally FK on `numero_socio` (the family); `Log` FKs on `id_socio` (the individual). Don't "fix" this by uniquifying `numero_socio` or switching those FKs.
 - **`Socio.es_titular`**: exactly one titular per `numero_socio`, enforced in the app layer (`MembersService`), never at the DB layer. A `numero_socio` group with no titular is blocked from registering transactions everywhere (open picker and the Members "Registrar" shortcut alike) until an admin assigns one via Members.
@@ -95,6 +95,6 @@ These are the cross-cutting rules most likely to cause a real bug or a re-litiga
 - **`db.sql`/`db.md` are stale**, manually-maintained dumps that no longer match `models.py` (e.g. a `forma_pago` column and `transacciones.estado` that don't exist in code). `models.py` is the sole source of truth — never derive code from the docs.
 - **Every write service records an audit `Log` row** via `database/audit.py`'s `record_log()`, inside the same `get_session()` transaction as the write it documents (`ResetService.full_reset()` is the one necessary exception, since it drops the `logs` table itself). Writes not attributable to a member pass `id_socio=None`. Follow this pattern for any new write service.
 - **Gotcha:** never do `from database.session import engine` (or `SessionLocal`) at module import time in code that needs the raw engine (e.g. `drop_all`/`create_all`) — import inside the function body, or `tests/conftest.py`'s DB-patching fixture won't apply and the code will silently touch the real DB during tests.
-- **Table → screen ownership is a deliberate per-table decision**, not a generic browser (`common/view_registry.py` is kept as unused plumbing, not wired to any screen — see ARCHITECTURE.md before reaching for it). `logs` is the one table still without an assigned screen.
+- **Table → screen ownership is a deliberate per-table decision**, not a generic browser (`common/view_registry.py` is kept as unused plumbing, not wired to any screen — see [architecture/database.md](architecture/database.md) before reaching for it). `logs` is the one table still without an assigned screen.
 - **Single-row-only editing**: every "Editar" action (Members, Métodos de pago, Reglas de cobro) refuses with an info message if more than one row is selected, rather than silently editing the first. Every "Eliminar"/deactivate action requires an explicit confirmation dialog naming the affected row(s) — never a silent/direct path.
 - **Feature folders**: a new domain (periods, reports) gets its own `features/<domain>/` package (view+toolbar+dialog+service together), not flat files under a shared `services/` layer.
