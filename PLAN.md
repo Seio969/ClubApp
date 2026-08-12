@@ -4,68 +4,15 @@ _Generated: 2026-08-08. Based on direct inspection of the code in `src/`, `READM
 
 ## 0. Executive summary
 
-The project is at a **very early stage**: the "Gestionar Miembros" (Manage Members) screen and a "⚙️ Ajustes" (Settings) hub are wired up. Within Members, member CRUD (search/create/edit/deactivate) is fully implemented, persisted, and audit-logged — export and transaction-registration are still logging placeholders. Within Ajustes, payment methods and billing rules both have full CRUD (soft-deactivation only, same pattern as members), and a database reset action (full wipe + scoped reset, type-to-confirm safety flow) exists. The rest of the financial functionality described in `README.md` (transactions, balances, periods, reports, backups, import) **has no UI or service implemented at all**, even though the ORM schema for almost everything already exists in `models.py`. There is a `pytest` suite (see §3) but no linter, no type-checker, and no CI configured.
+The project is at an **early-mid stage**: the "Gestionar Miembros" (Manage Members) screen, a "🧾 Transacciones" screen, and a "⚙️ Ajustes" (Settings) hub are wired up. Within Members, member CRUD (search/create/edit/deactivate) is fully implemented, persisted, and audit-logged — export remains a logging placeholder. Transaction registration is real (shared `TransactionDialog`, both a Members "Registrar" shortcut and the standalone Transacciones screen), with integrity validation, but balance calculation (`SaldoSocios`) and period management beyond a minimal quick-create are still unbuilt. Within Ajustes, payment methods and billing rules both have full CRUD (soft-deactivation only, same pattern as members), a read-only audit log viewer exists, and a database reset action (full wipe + scoped reset, type-to-confirm safety flow) exists. The rest of the financial functionality described in `README.md` (balances, periods, reports, backups, import) **has no UI or service implemented at all**, even though the ORM schema for almost everything already exists in `models.py`. There is a `pytest` suite (see §3) but no linter, no type-checker, and no CI configured.
 
 This document lists, by category, everything that's pending and proposes an execution order.
 
 ---
 
-## 1. Known bugs to fix first
-
-**Completed** (branch `fix/quick-bugs-plan-section-1`):
-- [x] `on_refresh` indentation fixed
-- [x] Dead QSS header-color comment fixed
-- [x] `main.py` DB-path check now uses `config.DATA_DIR`
-- [x] `delete_members` now soft-deletes via DB `UPDATE`
-
-**Completed** (branch `fix/multiselect-edit-guard`):
-- [x] Multi-select "Editar" now refuses with an info message (no dialog) when more than one row is selected — `MembersToolBar.on_edit_member`, `MetodosPagoToolBar.on_edit_metodo`, `ReglasCobroToolBar.on_edit_regla`
-- [x] Batch Activar/Desactivar for métodos de pago and reglas de cobro — the single ambiguous toggle is replaced by two always-batch-capable buttons
-
-**Completed** (branch `fix/numeric-validator-scientific-notation`):
-- [x] Currency `QDoubleValidator`s (`TransactionDialog.monto_input`, `ReglaCobroDialog.cuota_mensual_input`/`penalizacion_input`/`descuento_input`) forced to `StandardNotation`, closing the scientific-notation (`1e5` → 100000) loophole; `plazo_pago_input`'s `QIntValidator` spot-checked and confirmed unaffected
-
-**Completed** (branch `fix/non-editable-grid-cells`):
-- [x] Members and Transacciones grid cells made non-editable, matching the pattern `MetodosPagoView`/`ReglasCobroView` already used (4.5)
-- [x] `Refrescar` (and changing the límite field) no longer discards an active Members search — `MembersMenuView.load_table_view()` was hardcoding an empty search string on every reload instead of reading the search box, found while manually testing the fix above
-
-**Completed** (2026-08-09):
-- [x] Transacciones `tipo` casing bug — `TIPOS_TRANSACCION` was all-lowercase (`cargo`/`pago`/`reembolso`) while real DB data (from the legacy `.xlsm` import, see 2.15b) was mostly Title Case with a few stray lowercase `cargo` rows, making the Tipo filter dropdown/table inconsistent. Fixed: `TIPOS_TRANSACCION` is now `("Cargo", "Pago", "Reembolso", "Devolución")` — Title Case, plus `"Devolución"` added as the 4th type 2.15b already flagged as missing; `database/init_db.py`'s new `_normalize_tipo_transaccion()` cleans up any pre-existing mixed-case rows on every startup (idempotent, same pattern as `_add_missing_columns`). The tipo dropdown (`TransactionDialog.tipo_input`) was already a non-editable `QComboBox` restricted to `TIPOS_TRANSACCION`, so no separate "limit entries" change was needed there — only the constant's values. See 2.15b's mapping table for the still-open follow-ups (no validation rule for `"Devolución"` yet, bank-`cargo` concept unscoped).
-
----
-
 ## 2. Critical business functionality — not implemented
 
-**Completed** (branch `feat/members-crud-completion`):
-- [x] Real member search & default table load — replaced the `# FIXME` placeholder with a real query over `socios`; the default load now goes through the same query path instead of `ViewRegistry` (2.3)
-- [x] Editing members — `MemberDialog` reused in an "edit" mode (`initial_data`) + `MembersService.get_member`/`update_member` (2.1)
-- [x] Deactivation confirmation dialog before `MembersToolBar.on_delete_member` fires (2.2 / 4.3)
-- [x] Audit log rows written on every member create/edit/deactivate, via `database/audit.py`'s `record_log` (2.12 — writing only; reading them back was a separate, later chunk, see the audit-log-viewer entry below)
-- [x] Retired the generic "Vistas" multi-table browser from the Members screen (2.16)
-
-**Completed** (branch `feat/seed-data-and-settings`):
-- [x] `metodos_pago` seeded with the 5 fixed README methods, idempotent, run from `init_db()` (2.7 / 3.5)
-- [x] Settings screen implemented as a real hub (`⚙️ Ajustes`) with section navigation, replacing the no-op button (2.7)
-- [x] Payment methods (`MetodoPago`) full CRUD — fixed methods protected from rename/delete but deactivatable, custom methods fully editable, soft-deactivation only (2.7)
-- [x] Billing rules (`ReglaCobro`) full CRUD — multiple named rules supported, soft-deactivation only (2.7)
-- [x] Database reset action — full wipe + scoped reset, type-to-confirm safety flow (2.15)
-
-**Completed** (branch `feat/transactions-module`):
-- [x] Transactions module (2.4) — `features/transactions/` package (service/dialog/toolbar/view), both decided entry points wired (Members "Registrar" shortcut + standalone `Transacciones` main-menu screen), integrity validation (refund-availability, exact-duplicate rejection), minimal período quick-create. See `CLAUDE.md`'s `features/transactions/` section for the full design.
-- [ ] Balance recalculation (originally 2.4's build step 7) — deliberately **not** included; see 2.5 below.
-
-**Completed** (branch `feat/titular-por-numero-socio`):
-- [x] Titular (primary holder) per `numero_socio` (2.17) — `Socio.es_titular`, auto-unset-other-titular-on-swap with a UI confirmation, forced titular on a brand-new `numero_socio`, `TransactionDialog`'s picker defaulting to titulares (non-titulares within a titular-having group stay searchable), the Registrar shortcut and the open picker both fully blocked for un-migrated `numero_socio` groups until an admin assigns a titular, `cambio_titular` audit-log rows. See `CLAUDE.md`'s `features/members/` and `features/transactions/` sections.
-- [x] Bug found while manually testing the above: `main.py` only called `init_db()` when `data/club_manager.db` didn't exist yet, so `_add_missing_columns()` never ran for anyone who already had a DB — `Socio.es_titular` (or any future added column) would silently never apply, crashing with `no such column` on first query instead of at startup. Fixed by calling `init_db()` unconditionally on every launch (it's fully idempotent/safe to do so). See `CLAUDE.md`'s `src/main.py` section.
-
-**Completed** (branch `feat/estado-filter-inactive-members`):
-- [x] Estado-aware filtering for deactivated members (2.2) — `MembersMenuService.search_members`/`_fetch_socios_rows` hide `estado="inactivo"` socios by default; a "Mostrar inactivos" checkable action in the Members Filtros menu opts back in, re-running the query rather than hiding/showing a column.
-
-**Completed** (2026-08-09):
-- [x] Members Activar/Desactivar toolbar buttons — the members toolbar only had a one-way "Eliminar" action (deactivate via `MembersService.delete_members`, no way to reactivate from the UI once a member was deactivated). Replaced it with the same batch Activar/Desactivar pattern already used by Métodos de pago/Reglas de cobro (fix/multiselect-edit-guard, above): `MembersService.set_socio_estado(id_socio, estado)` (single-row, mirrors `set_metodo_pago_estado`/`set_regla_cobro_estado`) plus `MembersToolBar._set_estado_for_selection`/`_resolve_selected_rows` (batch, skips rows already in the target estado, confirms only when deactivating). A deactivated member can now be found again via "Mostrar inactivos" and reactivated with "Activar", instead of being stuck inactive forever.
-
-**Completed** (branch `feat/audit-log-viewer`):
-- [x] Audit log viewer (2.12) — `features/settings/audit_log/service.py`/`view.py`, a new "🗂️ Registro de auditoría" section under Ajustes.
+Members CRUD, seed data + Settings (payment methods/billing rules CRUD, DB reset), the transactions module (minus balance recalculation), titular-per-`numero_socio`, estado-aware member filtering, and the audit log viewer are all done — see git history / `CLAUDE.md` for detail. Balance recalculation (2.4's original build step 7) was deliberately **not** included in the transactions module; see 2.5 below.
 
 Everything below already has an ORM model declared in `models.py` but **zero UI and zero service logic**, except where noted above:
 
@@ -182,25 +129,13 @@ Tooling: `openpyxl` + `oletools` were installed into a **throwaway `uv venv`** i
 ## 4. Pending UI / UX
 
 1. **Periods, Reports screens** — don't exist yet, not even as a skeleton (`features/periods/`, `features/reports/` haven't been created). `features/members/`, `features/settings/`, and now `features/transactions/` (2.4, done) follow the per-domain folder pattern documented in `CLAUDE.md`. `features/calendar/` (2.18) is the same story, but deliberately last — see below.
-2. **Overall visual/UI polish.** Bug 1.2 covers one specific rendering defect (the broken QSS header-color rule), but there's no wider design work planned yet: today the app is three hand-written QSS strings (`MAIN_MENU_STYLESHEET`, `MEMBERS_MENU_STYLESHEET`, `SETTINGS_MENU_STYLESHEET` in `styles.py` — the latter two already near-duplicates of each other) plus Qt's built-in `QStyle.SP_*` stock icons (no custom icon set, no consistent spacing/typography system, no light/dark theme, no design tokens). **Decided**: no specific reference given — Claude proposed a clean, modern look (palette, spacing, icons) for approval before wider rollout; see [`UI_PROPOSAL.md`](UI_PROPOSAL.md) for the full audit and design direction (token layer, unified ledger palette, `qtawesome` icons, extracted shared table/toolbar composition for future screens).
-
-**Completed** (branch `chore/remove-file-edit-menu-stubs`):
-- [x] File/Edit menu non-functional stubs removed (4.1) — New/Open/Save and the entire Edit menu (Undo/Redo/Cut/Copy/Paste) deleted from `menu_bar.py`; File menu now just has Exit
-
-**Completed** (branch `chore/remove-members-limit-control`):
-- [x] "Límite" row-limit control removed from Members screen (4.6)
-
-**Completed** (branch `feat/live-incremental-search`):
-- [x] Live/incremental search wired for Members and Transacciones (4.5)
-
-**Completed** (branch `fix/table-selection-persistence`, PR #20):
-- [x] Table row selection persists across a plain reload (re-selects the same row by id), clears on header-click sort, and clears on navigating away from the screen (4.4)
+2. **Overall visual/UI polish.** There's no wider design work planned yet: today the app is three hand-written QSS strings (`MAIN_MENU_STYLESHEET`, `MEMBERS_MENU_STYLESHEET`, `SETTINGS_MENU_STYLESHEET` in `styles.py` — the latter two already near-duplicates of each other) plus Qt's built-in `QStyle.SP_*` stock icons (no custom icon set, no consistent spacing/typography system, no light/dark theme, no design tokens). **Decided**: no specific reference given — Claude proposed a clean, modern look (palette, spacing, icons) for approval before wider rollout; see [`UI_PROPOSAL.md`](UI_PROPOSAL.md) for the full audit and design direction (token layer, unified ledger palette, `qtawesome` icons, extracted shared table/toolbar composition for future screens).
 
 ---
 
 ## 5. Recommended order of work
 
-**Done** (steps that drove the original ordering — kept here only as a progress marker, see §1/§2's own Completed blocks for detail): quick bugs from the original audit, minimal testing infrastructure, Members CRUD completion, seed data + Settings (incl. database reset), the transactions module minus balance recalculation, titular per `numero_socio` (2.17), the numeric validator scientific-notation fix, and non-editable grid cells + a Refrescar/search-filter bug fix (§1).
+The original ordering (quick bugs, minimal testing infrastructure, Members CRUD completion, seed data + Settings incl. database reset, the transactions module minus balance recalculation, titular per `numero_socio`, the numeric validator scientific-notation fix, non-editable grid cells + a Refrescar/search-filter bug fix) is done — see git history for detail.
 
 **Next — gated on user decisions, not on any remaining code:**
 1. **Balance calculation and Periods** (2.5, 2.6) — 2.15b's `.xlsm` analysis is done, but implementation is still blocked on resolving what it surfaced: período-scoped vs. continuous `saldo_actual`, devolución-vs-reembolso modeling, and `plazo_pago`/`descuento` values with no legacy precedent. A full Periods management screen is still unbuilt.
