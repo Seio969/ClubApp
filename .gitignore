@@ -15,3 +15,4 @@ wheels/
 
 # Claude Code local/personal settings (not shared across the team)
 .claude/settings.local.json
+graphify-out/
