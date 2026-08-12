@@ -17,10 +17,8 @@ Members CRUD, seed data + Settings (payment methods/billing rules CRUD, DB reset
 Everything below already has an ORM model declared in `models.py` but **zero UI and zero service logic**, except where noted above:
 
 ### 2.5 Balance calculation and carry-over (`SaldoSocios`)
-- There's no service that computes `saldo_actual` from `saldo_anterior + cargos - pagos` (or similar), nor one that carries a balance from one period to the next when periods are closed/opened.
+- There's no service that computes `saldo_actual`, nor one that carries a balance from one period to the next when periods are closed/opened. **Not blocked anymore** — the formula, scope, and related `ReglaCobro` values are now decided, see `CLAUDE.md`'s "Key invariants & durable decisions" section. Still nothing built.
 - This calculation should be triggered automatically after every transaction (README requirement "Automatic balance calculation"), most likely as part of the `Transaccion` save logic, not as a manual step.
-- **Decided**: intentionally not built alongside the transactions module (2.4) even though it was originally scoped as that module's last build step — the exact formula (and any carry-over/penalización/descuento nuance) is likely already defined in the legacy `.xlsm` this app is replacing (see 2.15b). Building a guessed version now risked rework once that workbook is analyzed.
-- **2.15b's analysis is now done** (2026-08-08) — but it surfaced open questions rather than a ready-to-port formula: whether `saldo_actual` should be período-scoped or a continuous running total, and that legacy's "Devolución" (bounced direct debit) isn't the same concept as this app's `tipo="reembolso"` (money back to a member). Resolve those with the user before implementing this item — see 2.15b's mapping table.
 
 ### 2.6 Period management (`Periodo`)
 - No screen to open/close/edit accounting periods. `estado` (open/closed) exists on the model but nothing changes it.
@@ -61,7 +59,7 @@ Tooling: `openpyxl` + `oletools` were installed into a **throwaway `uv venv`** i
 - `Cargos` / `Pagos` / `Devoluciones` — three append-only entry logs (one per transaction type: `B CARGOS`/`C PAGOS`/`D DEVOLUCIONES`), each row: Fecha, Acción, Apellidos+Nombre, Número de Socio, Forma de pago, Observaciones, a processed-flag, Mes de Cargo (período), Importe. Maps almost 1:1 onto `Transaccion` — **except** `Devolución` here means a **bounced/returned bank direct debit** (the bank rejects a `pago`, which then needs re-charging), not money paid back to a member. **Confirmed by the user (2026-08-08): devolución and reembolso are genuinely different concepts, not a naming overlap to paper over.** The app's `Transaccion.tipo` enum (`cargo`/`pago`/`reembolso`) has **no equivalent today for "the bank rejected this pago"** — that's a real gap, not just a documentation nuance: modeling it needs either a fourth tipo (e.g. `devolucion`) or some other way to mark a `pago` as bounced, plus the paired 10% recargo (see below). Design that concretely before touching 2.4/2.5's code, don't bolt it onto `reembolso`.
 - Each bounced-debit row in `Devoluciones` is paired with a `RECARGO` row; across 80 paired rows the recargo/devolución ratio is **exactly 0.10 in 57 of them** (the rest cluster around 0.086–0.101, likely bank-fee rounding/manual-entry noise) — the real-world source of `ReglaCobro.penalizacion`: a 10% surcharge on a bounced direct debit, currently a manually-entered second ledger line rather than a computed value.
 - Monthly template sheets (`Cargos Todos Socios STD`, `Agosto 2026+NO`, `Septiembre 2026`, one per período back to `Enero 2025`) — pre-populated with the full active roster; each row's `Importe` formula points at the single `ALTA (SALDO)!$M$2` cell above, so every member is charged the same amount for a given período by default. This is the manual "generate this month's charges" step a human runs — closest legacy analogue to an automated "batch-create cargos for the open período" action, which the app has no equivalent of (candidate addition to 2.6, not built).
-- `SALDOS POR SOCIO` (Excel table `Tabla6`) — the actual ledger: one row per transaction once copied over by a macro (see below), with Cargos/Pagos/Devoluciones derived by `IF(Acción=...)` and a **cumulative running `SALDO`** (`Pagos − Cargos − Devoluciones`, running total) computed over **all time**, never scoped or reset per período. This is `SaldoSocios`' real-world origin, but it does **not** match the model's per-`(numero_socio, id_periodo)` row shape. **Open question this analysis surfaces but doesn't resolve: should `SaldoSocios.saldo_actual` be período-scoped (per the current schema) or a continuous running total (per legacy)? Needs a user decision before 2.5 is implemented.**
+- `SALDOS POR SOCIO` (Excel table `Tabla6`) — the actual ledger: one row per transaction once copied over by a macro (see below), with Cargos/Pagos/Devoluciones derived by `IF(Acción=...)` and a **cumulative running `SALDO`** (`Pagos − Cargos − Devoluciones`, running total) computed over **all time**, never scoped or reset per período. This is `SaldoSocios`' real-world origin. **Decided (2026-08-12): `saldo_actual` is a continuous running total, achieved by chaining `saldo_anterior` forward at every período transition — no schema change needed, see `CLAUDE.md`.**
 - `Saldo Anterior` ("SALDO 2024") — a one-time, manually-produced year-opening snapshot carrying each member's prior-year balance forward. Confirms `SaldoSocios.saldo_anterior` is an **annual** carry-over checkpoint (a discrete "close year" action), not something derived automatically period-to-period.
 - `CONFIGURACIÓN` — pure dropdown/validation source lists, **no numeric rates anywhere in it**: Mes de Cargo labels, Formas de pago (`REMESA`, `REMESA/CARENCIA`, `EFECTIVO`, `TRANSFERENCIA`, `TRANSFERENCIA/EFECTIVO`, `BAJA`), a Devolución/Recargo list, and the three Acción tags. `BAJA` doubles as a forma-de-pago value meaning "member has left," conflating payment method with membership status — the app's separate `Socio.estado` is already cleaner; nothing to port.
 - `Busqueda por socio` — a tiny ad hoc single-member lookup (paste a name, `VLOOKUP` pulls their saldo). Confirms the still-open per-socio balance detail view need already noted in `CLAUDE.md`'s table→screen mapping (`saldos_socios` → "derived per-socio balance display," no screen built yet).
@@ -79,10 +77,10 @@ Tooling: `openpyxl` + `oletools` were installed into a **throwaway `uv venv`** i
 | `Cargos`/`Pagos`/`Devoluciones`(bounced)+`RECARGO` logs | `Transaccion` (2.4) | cargo/pago/reembolso done; **`"Devolución"` added as a 4th `TIPOS_TRANSACCION` value (2026-08-09, tipo-casing bug fix)** — selectable in the dropdown and filter, but still just a plain `Transaccion` row: no balance-validation rule, no auto-computed 10% recargo pairing, and no "mark this pago as bounced" relationship. See the "Still open" note below. |
 | Global current-cuota cell (`36+5+1`) | `ReglaCobro.cuota_mensual` (2.5/2.7) | Legacy has one club-wide value, not multiple named rules — recommend treating it as one active rule for now |
 | Devolución + 10% recargo | `ReglaCobro.penalizacion` (2.5/2.7) | Recommend auto-computing 10% of the bounced amount rather than a manual second entry |
-| "día 10" recargo-trigger comment | `ReglaCobro.plazo_pago` (2.7) | Weak evidence (~10 days) — confirm with the user |
-| *(nothing found)* | `ReglaCobro.descuento` (2.7) | No legacy precedent at all |
+| "día 10" recargo-trigger comment | `ReglaCobro.plazo_pago` (2.7) | **Decided (2026-08-12): 10 days** |
+| *(nothing found)* | `ReglaCobro.descuento` (2.7) | **Decided (2026-08-12): no legacy precedent — leave unused/manual-only, no discount logic built** |
 | Monthly template sheets + `PasarFilasATabla6_Rapido` | Batch charge-generation per período (2.6) | Not built — candidate new sub-feature |
-| `SALDOS POR SOCIO` running balance | `SaldoSocios.saldo_actual` (2.5) | Continuous total vs. this app's período-scoped rows — **needs a decision, see above** |
+| `SALDOS POR SOCIO` running balance | `SaldoSocios.saldo_actual` (2.5) | **Decided (2026-08-12): continuous running total**, chained via `saldo_anterior` every período — see `CLAUDE.md` |
 | `Saldo Anterior` year snapshot | `SaldoSocios.saldo_anterior` (2.5) | Confirmed: annual carry-over, not period-to-period |
 | `-108` / `+ de tres recibos` debtor escalation | none yet | Candidate for 2.8/2.9 (reports/alerts), not scoped |
 | `Busqueda por socio` | per-socio balance detail view | Still the open `saldos_socios` screen gap noted in `CLAUDE.md` |
@@ -90,7 +88,7 @@ Tooling: `openpyxl` + `oletools` were installed into a **throwaway `uv venv`** i
 
 **Decided (workflow, unchanged):** analyze and document first, agree on the implementation mapping with the user, *then* implement inside the relevant `features/<domain>/` package — not a direct/blind port of VBA into Python. This entry is that analysis-and-mapping deliverable.
 - **Decided (2026-08-08): devolución (bank-rejected pago) and reembolso (money back to a member) are distinct concepts** — `Transaccion` needs a way to represent the former that it doesn't have today (see the mapping table row above). **`"Devolución"` now exists as a selectable `TIPOS_TRANSACCION` value (2026-08-09)** — closes the "no equivalent tipo at all" gap, but the deeper modeling (bounced-pago linkage, auto recargo) is still not designed.
-- **Still open, blocking 2.5/2.7 implementation:** período-scoped vs. continuous `saldo_actual`, and `plazo_pago`/`descuento` values with no legacy precedent.
+- **Resolved (2026-08-12):** `saldo_actual` is a continuous running total (not período-scoped), `plazo_pago` = 10 days, `descuento` has no legacy precedent and stays unbuilt — see `CLAUDE.md` for the full decided formula. 2.5/2.6 implementation is no longer blocked on these; it just hasn't been built yet.
 - **Still open (flagged 2026-08-09, deliberately deferred by the user):** whether `"Devolución"` should get a balance-validation rule like `"Reembolso"`'s (can't exceed available pagos) — currently unrestricted. Also flagged, not yet scoped: a bank-initiated `cargo` (`REMESA`/`TRANSFERENCIA` — see `metodos_pago`) may need to exist as its own concept, separate from a manually-entered `cargo`.
 - Depended on: the user attaching the `.xlsm` file — **done**, analyzed 2026-08-08.
 
@@ -137,8 +135,8 @@ Tooling: `openpyxl` + `oletools` were installed into a **throwaway `uv venv`** i
 
 The original ordering (quick bugs, minimal testing infrastructure, Members CRUD completion, seed data + Settings incl. database reset, the transactions module minus balance recalculation, titular per `numero_socio`, the numeric validator scientific-notation fix, non-editable grid cells + a Refrescar/search-filter bug fix) is done — see git history for detail.
 
-**Next — gated on user decisions, not on any remaining code:**
-1. **Balance calculation and Periods** (2.5, 2.6) — 2.15b's `.xlsm` analysis is done, but implementation is still blocked on resolving what it surfaced: período-scoped vs. continuous `saldo_actual`, devolución-vs-reembolso modeling, and `plazo_pago`/`descuento` values with no legacy precedent. A full Periods management screen is still unbuilt.
+**Next:**
+1. **Balance calculation and Periods** (2.5, 2.6) — 2.15b's `.xlsm` analysis is done and the formula/scope decisions are resolved (see `CLAUDE.md`); nothing is blocking implementation anymore. A full Periods management screen is still unbuilt.
 2. **Business-standard test scenarios** (3.8) — once the rules they encode (2.4 done, 2.5/2.6 pending, 2.7 done) actually exist end-to-end.
 
 **Then — larger, independent features:**
@@ -153,7 +151,9 @@ The original ordering (quick bugs, minimal testing infrastructure, Members CRUD 
 
 ## 6. Decisions (resolved)
 
-Most previously open questions have been answered by the user. **Exception:** 2.15b's `.xlsm` analysis surfaced new open questions of its own (see that section's mapping table) — período-scoped vs. continuous `saldo_actual`, the devolución-vs-reembolso semantic mismatch, and `plazo_pago`/`descuento` values with no legacy precedent — none of those are resolved yet.
+Most previously open questions have been answered by the user. **Exception:** the devolución-vs-reembolso balance-validation question and the bank-initiated-`cargo` concept (both flagged 2026-08-09) remain deliberately deferred — see 2.15b.
+
+- **Balance formula and scope** (2026-08-12): `SaldoSocios.saldo_actual` is a continuous running total (not período-scoped) via `saldo_anterior` chaining every período; formula is `saldo_anterior + cargos − pagos − reembolsos + devoluciones`; `ReglaCobro.plazo_pago` = 10 days; `ReglaCobro.descuento` has no legacy precedent and stays unbuilt. Full detail in `CLAUDE.md`'s "Key invariants & durable decisions". See 2.5, 2.15b.
 
 - **Delete-member semantics**: soft delete only — "Eliminar" always sets `estado = "inactivo"`, never a physical `DELETE`. See 2.2.
 - **Export format priority**: Excel first (`openpyxl`), PDF later. See 2.8.
