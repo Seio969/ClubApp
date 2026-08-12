@@ -74,7 +74,7 @@ src/
     main_window.py              # QMainWindow + QStackedWidget shell
     views/
       main_menu_widget.py        # home screen
-      menu_bar.py                 # QMenuBar (File/Edit/View/Help)
+      menu_bar.py                 # QMenuBar (File/View/Help - Edit menu removed, no free-text/clipboard surface in this app)
   utils/
     logger.py                  # rotating file + stdout logger factory
     text.py                     # normalize_for_match() - shared accent/case-insensitive text normalization

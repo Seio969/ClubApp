@@ -51,13 +51,6 @@ class MainMenuBar(QMenuBar):
             "Sistema de gestión del Club Social Paraiso\n\nVersión 1.0\n\nDesarrollado por\nSergio Alfonso Gutierrez.",
         )
 
-    def not_implemented(self, name: str, *_args) -> None:
-        from PySide6.QtWidgets import QMessageBox
-
-        QMessageBox.information(
-            self.main_window, name, f"'{name}' is not implemented yet."
-        )
-
     def _setup_menus(self) -> None:
         """Create and add all menus and actions to this menu bar."""
         self.clear()
@@ -65,61 +58,11 @@ class MainMenuBar(QMenuBar):
         # --- File menu ---
         file_menu = self.addMenu("&File")
 
-        act_new = QAction("&New", self)
-        act_new.setShortcut("Ctrl+N")
-        act_new.setStatusTip("Create a new item")
-        act_new.triggered.connect(lambda *_args, name="New": self.not_implemented(name))
-        file_menu.addAction(act_new)
-
-        act_open = QAction("&Open...", self)
-        act_open.setShortcut("Ctrl+O")
-        act_open.setStatusTip("Open an existing file")
-        act_open.triggered.connect(lambda *_args, name="Open": self.not_implemented(name))
-        file_menu.addAction(act_open)
-
-        act_save = QAction("&Save", self)
-        act_save.setShortcut("Ctrl+S")
-        act_save.setStatusTip("Save the current file")
-        act_save.triggered.connect(lambda *_args, name="Save": self.not_implemented(name))
-        file_menu.addAction(act_save)
-
-        file_menu.addSeparator()
-
         act_exit = QAction("E&xit", self)
         act_exit.setShortcut("Ctrl+Q")
         act_exit.setStatusTip("Exit the application")
         act_exit.triggered.connect(self.main_window.close)
         file_menu.addAction(act_exit)
-
-        # --- Edit menu ---
-        edit_menu = self.addMenu("&Edit")
-
-        act_undo = QAction("&Undo", self)
-        act_undo.setShortcut("Ctrl+Z")
-        act_undo.triggered.connect(lambda *_args, name="Undo": self.not_implemented(name))
-        edit_menu.addAction(act_undo)
-
-        act_redo = QAction("&Redo", self)
-        act_redo.setShortcut("Ctrl+Y")
-        act_redo.triggered.connect(lambda *_args, name="Redo": self.not_implemented(name))
-        edit_menu.addAction(act_redo)
-
-        edit_menu.addSeparator()
-
-        act_cut = QAction("Cu&t", self)
-        act_cut.setShortcut("Ctrl+X")
-        act_cut.triggered.connect(lambda *_args, name="Cut": self.not_implemented(name))
-        edit_menu.addAction(act_cut)
-
-        act_copy = QAction("&Copy", self)
-        act_copy.setShortcut("Ctrl+C")
-        act_copy.triggered.connect(lambda *_args, name="Copy": self.not_implemented(name))
-        edit_menu.addAction(act_copy)
-
-        act_paste = QAction("&Paste", self)
-        act_paste.setShortcut("Ctrl+V")
-        act_paste.triggered.connect(lambda *_args, name="Paste": self.not_implemented(name))
-        edit_menu.addAction(act_paste)
 
         # --- View menu ---
         view_menu = self.addMenu("&View")
