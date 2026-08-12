@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from database.audit import record_log
 from database.models import MetodoPago, Periodo, Socio, Transaccion
 from database.session import get_session
+from features.balances.service import BalancesService
 from utils.text import normalize_for_match
 from utils.logger import get_logger
 
@@ -290,11 +291,15 @@ class TransactionsService:
     def _validate_transaction(self, session: Session, data: Dict[str, Any]) -> Optional[str]:
         """Return an error message if `data` fails an integrity rule, else None.
 
-        Two rules (PLAN.md 2.4, decided):
-        - A "reembolso" can't exceed what's actually available to refund:
-          sum of "pago" minus sum of already-refunded "reembolso", scoped to
-          the same numero_socio+id_periodo (mirrors SaldoSocios' per-período
-          scoping).
+        Two rules (PLAN.md 2.4/2.5, decided):
+        - "Reembolso" and "Devolución" both reverse a prior "pago" (a
+          voluntary refund vs. a bounced bank direct debit - see
+          BalancesService's module docstring) and so share one pool: their
+          combined total can't exceed sum of "pago" for the same
+          numero_socio+id_periodo (mirrors SaldoSocios' per-período
+          scoping). Registering a Devolución with no corresponding prior
+          Pago - or one exceeding what's left of it - is rejected the same
+          way an over-large Reembolso already was.
         - No exact-duplicate Transaccion (same numero_socio/tipo/monto/
           id_periodo/id_metodo/fecha) - catches accidental double-submission
           (e.g. double-clicking "Aceptar") without blocking legitimate
@@ -305,13 +310,15 @@ class TransactionsService:
         tipo = data.get("tipo")
         monto = data.get("monto")
 
-        if tipo == "Reembolso":
+        if tipo in ("Reembolso", "Devolución"):
             pagos = self._sum_by_tipo(session, numero_socio, id_periodo, "Pago")
             reembolsos = self._sum_by_tipo(session, numero_socio, id_periodo, "Reembolso")
-            disponible = pagos - reembolsos
+            devoluciones = self._sum_by_tipo(session, numero_socio, id_periodo, "Devolución")
+            disponible = pagos - reembolsos - devoluciones
             if monto is None or monto > disponible:
+                accion = "reembolsar" if tipo == "Reembolso" else "registrar como devolución"
                 return (
-                    f"No se puede reembolsar {monto}€: el socio {numero_socio} solo tiene "
+                    f"No se puede {accion} {monto}€: el socio {numero_socio} solo tiene "
                     f"{disponible}€ disponibles de pagos en este período."
                 )
 
@@ -362,6 +369,11 @@ class TransactionsService:
         used only to attribute the audit Log row. Transaccion itself FKs on
         numero_socio (the family), not id_socio - see models.py's note on
         why Log differs from Transaccion here.
+
+        Triggers BalancesService.recalcular_saldo in the same transaction
+        (PLAN.md 2.5, "automatic balance calculation") so a failed
+        recalculation rolls back the write instead of leaving them
+        inconsistent.
         """
         data = dict(data)
         id_socio_log = data.pop("id_socio_log", None)
@@ -376,6 +388,7 @@ class TransactionsService:
                 session.add(transaccion)
                 session.flush()
                 new_id = transaccion.id_transaccion
+                BalancesService().recalcular_saldo(session, data.get("numero_socio"), data.get("id_periodo"))
                 record_log(
                     session,
                     id_socio=id_socio_log,

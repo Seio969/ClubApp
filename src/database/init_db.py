@@ -13,6 +13,8 @@ _COLUMN_MIGRATIONS = [
     ("metodos_pago", "estado", "ALTER TABLE metodos_pago ADD COLUMN estado VARCHAR DEFAULT 'activo'"),
     ("reglas_cobro", "estado", "ALTER TABLE reglas_cobro ADD COLUMN estado VARCHAR DEFAULT 'activo'"),
     ("socios", "es_titular", "ALTER TABLE socios ADD COLUMN es_titular BOOLEAN DEFAULT 0"),
+    ("saldos_socios", "reembolsos", "ALTER TABLE saldos_socios ADD COLUMN reembolsos NUMERIC(10, 2) DEFAULT 0"),
+    ("saldos_socios", "devoluciones", "ALTER TABLE saldos_socios ADD COLUMN devoluciones NUMERIC(10, 2) DEFAULT 0"),
 ]
 
 # lowercase/legacy transacciones.tipo value -> canonical TIPOS_TRANSACCION

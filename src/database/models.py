@@ -92,6 +92,8 @@ class SaldoSocios(Base):
     saldo_anterior = Column(Numeric(10, 2), default=0)
     cargos = Column(Numeric(10, 2), default=0)
     pagos = Column(Numeric(10, 2), default=0)
+    reembolsos = Column(Numeric(10, 2), default=0)
+    devoluciones = Column(Numeric(10, 2), default=0)
     saldo_actual = Column(Numeric(10, 2), default=0)
 
 
