@@ -95,3 +95,13 @@ These are the cross-cutting rules most likely to cause a real bug or a re-litiga
 - **Table → screen ownership is a deliberate per-table decision**, not a generic browser (`common/view_registry.py` is kept as unused plumbing, not wired to any screen — see [architecture/database.md](architecture/database.md) before reaching for it). Every table now has an assigned screen — `logs`' is the Settings hub's "🗂️ Registro de auditoría" section (`AuditLogView`/`AuditLogService`), a filterable grid rather than a narrative timeline, reusing the same search/filter/table composition every other grid screen uses.
 - **Single-row-only editing**: every "Editar" action (Members, Métodos de pago, Reglas de cobro) refuses with an info message if more than one row is selected, rather than silently editing the first. All three screens instead batch-select for "Activar"/"Desactivar" (Members, Métodos de pago, Reglas de cobro all share this exact toolbar shape — see `_set_estado_for_selection` in each `toolbar.py`); "Desactivar" always requires an explicit confirmation dialog naming the affected row(s) — never a silent/direct path — while "Activar" doesn't (reactivating isn't destructive). Rows already in the target estado are silently skipped rather than erroring.
 - **Feature folders**: a new domain (periods, reports) gets its own `features/<domain>/` package (view+toolbar+dialog+service together), not flat files under a shared `services/` layer.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

@@ -11,6 +11,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "graphifyy>=0.9.38",
     "pytest>=9.1.1",
 ]
 
