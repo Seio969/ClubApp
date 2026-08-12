@@ -19,6 +19,7 @@ Everything below already has an ORM model declared in `models.py` but **zero UI 
 ### 2.5 Balance calculation and carry-over (`SaldoSocios`)
 - There's no service that computes `saldo_actual`, nor one that carries a balance from one period to the next when periods are closed/opened. **Not blocked anymore** — the formula, scope, and related `ReglaCobro` values are now decided, see `CLAUDE.md`'s "Key invariants & durable decisions" section. Still nothing built.
 - This calculation should be triggered automatically after every transaction (README requirement "Automatic balance calculation"), most likely as part of the `Transaccion` save logic, not as a manual step.
+- **Decided (2026-08-12): any "saldo por socio" display (balance screens/reports, the still-unbuilt per-socio balance detail view) must resolve the shown name dynamically via `Socio.es_titular`, not store a name/`id_socio` on the balance record** — the balance is always per `numero_socio` (the family), so reassigning the titular must never break or orphan it. See `CLAUDE.md`'s `numero_socio` invariant for the full rule.
 
 ### 2.6 Period management (`Periodo`)
 - No screen to open/close/edit accounting periods. `estado` (open/closed) exists on the model but nothing changes it.
