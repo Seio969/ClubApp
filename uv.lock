@@ -7,25 +7,27 @@ name = "appclubpapa"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "graphifyy" },
     { name = "pyside6" },
     { name = "sqlalchemy" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "graphifyy" },
     { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "graphifyy", specifier = ">=0.9.38" },
     { name = "pyside6", specifier = ">=6.9.2" },
     { name = "sqlalchemy", specifier = ">=2.0.43" },
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.1.1" }]
+dev = [
+    { name = "graphifyy", specifier = ">=0.9.38" },
+    { name = "pytest", specifier = ">=9.1.1" },
+]
 
 [[package]]
 name = "colorama"
