@@ -130,6 +130,8 @@ class TableSortMixin:
 
             for vals in rows:
                 items = [QStandardItem("" if v is None else str(v)) for v in vals]
+                for item in items:
+                    item.setEditable(False)
                 self.model.appendRow(items)
 
             header = self.table.horizontalHeader()

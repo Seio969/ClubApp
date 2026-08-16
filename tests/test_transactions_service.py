@@ -3,7 +3,9 @@
 Covers the lookup helpers that back TransactionDialog's dropdowns, the
 minimal período quick-create, and add_transaction's persistence + audit
 log. Integrity validation (refund-without-payment, duplicate detection)
-and balance recalculation get their own tests once those build steps land.
+has its own test classes below; balance recalculation (PLAN.md 2.5) is
+covered in test_balances_service.py, including its trigger from
+add_transaction.
 """
 
 from __future__ import annotations
@@ -385,6 +387,96 @@ class TestRefundRequiresPriorPayment:
         assert new_id is None
         with Session(test_engine) as session:
             assert session.query(Transaccion).filter_by(tipo="Reembolso").count() == 0
+
+
+class TestDevolucionRequiresPriorPayment:
+    """Devolución shares the "available pagos" pool with Reembolso (PLAN.md
+    2.5, decided 2026-08-12): both reverse a prior Pago, so a Devolución
+    exceeding what's left of it is rejected the same way an over-large
+    Reembolso already was.
+    """
+
+    def _setup_pago(self, session, monto: str = "45.00") -> dict:
+        socio = _make_socio(session)
+        metodo = _make_metodo(session)
+        periodo = _make_periodo(session)
+        session.commit()
+        return {
+            "numero_socio": socio.numero_socio,
+            "id_socio_log": socio.id_socio,
+            "id_periodo": periodo.id_periodo,
+            "id_metodo": metodo.id_metodo,
+            "tipo": "Pago",
+            "monto": decimal.Decimal(monto),
+            "fecha": datetime.date(2026, 1, 5),
+            "referencia": None,
+        }
+
+    def test_rejects_devolucion_with_no_prior_payment(self, test_engine):
+        service = TransactionsService()
+        with Session(test_engine) as session:
+            socio = _make_socio(session)
+            metodo = _make_metodo(session)
+            periodo = _make_periodo(session)
+            session.commit()
+            devolucion = {
+                "numero_socio": socio.numero_socio,
+                "id_socio_log": socio.id_socio,
+                "id_periodo": periodo.id_periodo,
+                "id_metodo": metodo.id_metodo,
+                "tipo": "Devolución",
+                "monto": decimal.Decimal("10.00"),
+                "fecha": datetime.date(2026, 1, 6),
+                "referencia": None,
+            }
+
+        new_id = service.add_transaction(devolucion)
+
+        assert new_id is None
+        with Session(test_engine) as session:
+            assert session.query(Transaccion).count() == 0
+
+    def test_allows_devolucion_covered_by_prior_payment(self, test_engine):
+        service = TransactionsService()
+        with Session(test_engine) as session:
+            pago = self._setup_pago(session, "45.00")
+        service.add_transaction(pago)
+
+        devolucion = dict(pago, tipo="Devolución", monto=decimal.Decimal("45.00"), fecha=datetime.date(2026, 1, 10))
+        new_id = service.add_transaction(devolucion)
+
+        assert new_id is not None
+        with Session(test_engine) as session:
+            assert session.query(Transaccion).filter_by(tipo="Devolución").count() == 1
+
+    def test_rejects_devolucion_exceeding_prior_payment(self, test_engine):
+        service = TransactionsService()
+        with Session(test_engine) as session:
+            pago = self._setup_pago(session, "45.00")
+        service.add_transaction(pago)
+
+        devolucion = dict(pago, tipo="Devolución", monto=decimal.Decimal("50.00"), fecha=datetime.date(2026, 1, 10))
+        new_id = service.add_transaction(devolucion)
+
+        assert new_id is None
+        with Session(test_engine) as session:
+            assert session.query(Transaccion).filter_by(tipo="Devolución").count() == 0
+
+    def test_reembolso_and_devolucion_share_the_same_pagos_pool(self, test_engine):
+        service = TransactionsService()
+        with Session(test_engine) as session:
+            pago = self._setup_pago(session, "45.00")
+        service.add_transaction(pago)
+        reembolso = dict(pago, tipo="Reembolso", monto=decimal.Decimal("30.00"), fecha=datetime.date(2026, 1, 10))
+        assert service.add_transaction(reembolso) is not None
+
+        # Only 15.00 of the original 45.00 pago is left unreversed.
+        devolucion = dict(pago, tipo="Devolución", monto=decimal.Decimal("20.00"), fecha=datetime.date(2026, 1, 11))
+        new_id = service.add_transaction(devolucion)
+
+        assert new_id is None
+        with Session(test_engine) as session:
+            assert session.query(Transaccion).filter_by(tipo="Devolución").count() == 0
 
 
 class TestListTransactions:

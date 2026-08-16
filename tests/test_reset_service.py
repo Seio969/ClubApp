@@ -15,7 +15,7 @@ import decimal
 from sqlalchemy.orm import Session
 
 from database.models import Log, MetodoPago, Periodo, ReglaCobro, SaldoSocios, Socio, Transaccion
-from database.seed_db import METODOS_PAGO_FIJOS, seed_metodos_pago
+from database.seed_db import METODOS_PAGO_FIJOS, REGLAS_COBRO_INICIALES, seed_metodos_pago
 from features.settings.reset.service import ResetService
 
 
@@ -69,7 +69,8 @@ class TestFullReset:
             assert session.query(Transaccion).count() == 0
             assert session.query(SaldoSocios).count() == 0
             assert session.query(Periodo).count() == 0
-            assert session.query(ReglaCobro).count() == 0
+            descripciones = {row.descripcion for row in session.query(ReglaCobro).all()}
+            assert descripciones == {r["descripcion"] for r in REGLAS_COBRO_INICIALES}
             nombres = {row.nombre for row in session.query(MetodoPago).all()}
             assert nombres == set(METODOS_PAGO_FIJOS)
 
