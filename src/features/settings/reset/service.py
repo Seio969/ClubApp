@@ -6,7 +6,8 @@ confirmation phrase plus a final Yes/No prompt, never a single
 dismissable dialog:
 
 - full_reset(): wipes every table and re-seeds the fixed metodos_pago
-  rows - "start over" for the whole club database.
+  rows plus the starting reglas_cobro row(s) - "start over" for the
+  whole club database.
 - scoped_reset(): clears only transacciones/saldos_socios/periodo,
   leaving socios, metodos_pago and reglas_cobro untouched - for
   discarding a season's financial activity while keeping membership and
@@ -30,7 +31,7 @@ logger = get_logger(__name__)
 
 class ResetService:
     def full_reset(self) -> bool:
-        """Drop and recreate every table, then re-seed metodos_pago.
+        """Drop and recreate every table, then re-seed metodos_pago/reglas_cobro.
 
         Imports `engine` from database.session at call time (not at
         module import time) so this - like every other write path here -
@@ -54,7 +55,7 @@ class ResetService:
                     id_registro_afectado=None,
                     descripcion_cambio=(
                         "Reinicio completo de la base de datos: todas las tablas vaciadas "
-                        "y métodos de pago fijos re-sembrados."
+                        "y métodos de pago y reglas de cobro iniciales re-sembrados."
                     ),
                 )
             logger.info("ResetService.full_reset: database fully reset and re-seeded")
