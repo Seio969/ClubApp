@@ -5,7 +5,8 @@ from __future__ import annotations
 import datetime
 from typing import Any, Optional
 
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QDate, QRegularExpression
+from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -39,6 +40,7 @@ class MemberDialog(QDialog):
         form.setSpacing(8)
 
         self.numero_socio_input = QLineEdit(self)
+        self.numero_socio_input.setValidator(QRegularExpressionValidator(QRegularExpression(r"^\d*$"), self))
         self.nombre_input = QLineEdit(self)
         self.apellidos_input = QLineEdit(self)
         self.telefono_input = QLineEdit(self)
